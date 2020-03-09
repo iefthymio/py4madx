@@ -49,7 +49,7 @@ def removeElementsFromSeq(mmad, sequ, elclass, elptrn):
 		select,flag=seqedit,class={elclass},pattern="{elptrn}*";
 		remove,element=SELECTED;
 		flatten;
-		endedit;
+		endedit; 
 	''')
 	mmad.options.info = opt_info
 	mmad.options.warn = opt_warn
