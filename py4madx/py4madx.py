@@ -15,6 +15,8 @@ LHCXsingKnobs = ['on_x1', 'on_sep1', 'on_o1', \
 				'on_x5', 'on_sep5', 'on_o5', 'on_ov5', \
 				'on_x8', 'on_sep8', 'on_o8',           'on_a8']
 
+from cpymad.madx import Madx
+
 # --- Functions in alphabetic order
 
 def countElementsInSeq(mmad, sname, seq):
@@ -38,7 +40,8 @@ def getLHCBeamSigmaAtIP(mmad, twdf, ip, lbeam):
 
 def getLHCBeamPosAtIP(twdf, lbeam):
 	'''
-		twdf : the twiss dataframe 
+		twdf 	: the twiss dataframe
+		lbeam	: the LHC beam, eg. 'lhcb1'
 	'''
 	ips = ['ip1','ip2','ip3','ip5','ip8']
 	_tmp = twdf[twdf['beam'] == lbeam]
