@@ -8,13 +8,16 @@ Some of the scripts are translations to py of existing ones in madx, available i
 ### Installation
 
 Use the command from your terminal : 
+
 '''
 pip install --user git+https://github.com/iefthymio/py4madx.git
 '''
 
 or for upgrades:
+
 '''
 pipt install --upgrade --user git+https://github.com/iefthymio/py4madx.git
+'''
 
 ### Usage
 
