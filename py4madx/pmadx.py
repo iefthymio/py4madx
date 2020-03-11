@@ -15,8 +15,6 @@ LHCXsingKnobs = ['on_x1', 'on_sep1', 'on_o1', \
 				'on_x5', 'on_sep5', 'on_o5', 'on_ov5', \
 				'on_x8', 'on_sep8', 'on_o8',           'on_a8']
 
-from cpymad.madx import Madx
-
 def countElementsInSeq(mmad, elnames, seq):
 	elist = mmad.sequence[seq].element_names()
 	f_elist = [e for e in elist if all(e.find(s)>=0 for s in elnames)]
@@ -58,20 +56,11 @@ def removeElementsFromSeq(mmad, sequ, elclass, elptrn):
 def getMadGlobals(mmad, sletter=''):
 	return dict((i, mmad.globals[i]) for i in mmad.globals.keys() if i.find(sletter)== 0 )
 
-def table2df(mdtable, option='FULL'):
-
-	vsel = ['name','s','x','y','betx','bety','sig11','sig12','sig22','sig33','sig34','sig44','sig13','sig14','sig23','sig24']
-
-	_df = pd.DataFrame()
-	if option == 'BASIC' :
-		for v in vsel:
-			vv = np.array(mdtable[v])
-			_df[v] = vv
-	else:
-		for v in list(mdtable):
-			vv = np.array(mdtable[v])
-			_df[v] = vv
-	return _df
+def twiss2df(twisstable):
+	_twdf = pd.DataFrame.from_dict(twisstable, orient='index').transpose()
+	_twdf['elname'] = _twdf['name'].apply(lambda x : x.split(':')[0])
+	_twdf.set_index('elname')
+	return _twdf.set_index('elname')
 
 def mergeLHCBeamTwissTables(mmad, twissb1, twissb2):
 	t_b1 = mmad.table[twissb1].dframe()
@@ -92,8 +81,8 @@ def surveyLHC(mmad):
 	return pd.concat([survb1, survb2])
 
 def twissLHC(mmad, selection=r'.', fout=''):
-	b1df, s1df = twissLHCBeam(mmad, 'lhcb1', selection, fout)
-	b2df, s2df = twissLHCBeam(mmad, 'lhcb2', selection, fout)
+	b1df, s1df = twissLHCBeam(mmad, 'lhcb1', selection, fout.replace('.','_b1.'))
+	b2df, s2df = twissLHCBeam(mmad, 'lhcb2', selection, fout.replace('.','_b2.'))
 
 	_tdf = pd.concat([b1df, b2df])
 	_sdf = pd.concat([s1df, s2df])
@@ -101,26 +90,17 @@ def twissLHC(mmad, selection=r'.', fout=''):
 
 def twissLHCBeam(mmad, lbeam, selection=r'.', fout=''):
 	mmad.use(sequence=lbeam)
-	if fout :
-		_fsplit = fout.split('.')
-		twiss = mmad.twiss(file='{}_{}.{}'.format(_fsplit[0], lbeam, _fsplit[1]))
-	else:
-		twiss = mmad.twiss()
-	_twissdf = twiss.dframe()
+	twiss = mmad.twiss(file=fout)
+	# _twissdf = twiss.dframe()
+	_twissdf = twiss2df(twiss)
 	_twissdf = _twissdf.filter(regex=selection, axis=0)
 	assert _twissdf.shape[0] > 0 , '>> twissLHCBeam: twiss table selection %r results to empty table!' % selection
-
 	_twissdf['beam'] = lbeam
 
-	_sumdf = mmad.table.summ.dframe()
-	_sumdf['beam'] = lbeam
-	thead = ['particle','mass','charge','energy','pc','gamma','beta','brho','kbunch','bcurrent','sige',\
-			 'sigt','npart','ex','ey','exn','eyn','et','bv',]
-	_bdef = mmad.sequence[lbeam].beam
-	for ihead in thead:
-		_sumdf[ihead] = _bdef[ihead]
-	_sumdf = _sumdf.set_index('beam')
-	return _twissdf, _sumdf
+	_sumdf = pd.DataFrame.from_dict(mmad.table.summ, orient='index')
+	_beamdf = pd.DataFrame.from_dict(mmad.sequence[lbeam].beam, orient='index')
+	_gdf = pd.concat([_sumdf, _beamdf]).transpose().set_index('sequence') 
+	return _twissdf, _gdf
 
 def printLHCXsingScheme(mmad):
 	print('\n LHC beam crossing scheme :')
