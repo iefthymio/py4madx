@@ -2,7 +2,7 @@ from setuptools import setup
 
 setup(
     name='py4madx',
-    version='0.0.1',
+    version='1.0.1',
     description='Scripts to use with cpymad for LHC',
     url='git@github.com:iefthymio/py4madx.git',
     author='Ilias Efthymiopoulos',
