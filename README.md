@@ -16,7 +16,7 @@ pip install --user git+https://github.com/iefthymio/py4madx.git
 or for upgrades:
 
 ```
-pipt install --upgrade --user git+https://github.com/iefthymio/py4madx.git
+pip install --upgrade --user git+https://github.com/iefthymio/py4madx.git
 ```
 
 ### Usage
