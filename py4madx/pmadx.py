@@ -15,6 +15,8 @@ LHCXsingKnobs = ['on_x1', 'on_sep1', 'on_o1', \
 				'on_x5', 'on_sep5', 'on_o5', 'on_ov5', \
 				'on_x8', 'on_sep8', 'on_o8',           'on_a8']
 
+LHCGlobals = ['NRJ','I_MO','ON_COLLISION','ON_BB_SWITCH','ON_BB_CHARGE']
+
 def countElementsInSeq(mmad, elnames, seq):
 	elist = mmad.sequence[seq].element_names()
 	f_elist = [e for e in elist if all(e.find(s)>=0 for s in elnames)]
@@ -90,9 +92,8 @@ def twissLHC(mmad, selection=r'.', fout=''):
 
 def twissLHCBeam(mmad, lbeam, selection=r'.', fout=''):
 	mmad.use(sequence=lbeam)
-	twiss = mmad.twiss(file=fout)
-	# _twissdf = twiss.dframe()
-	_twissdf = twiss2df(twiss)
+	_ttable = mmad.twiss(file=fout)
+	_twissdf = twiss2df(_ttable)
 	_twissdf = _twissdf.filter(regex=selection, axis=0)
 	assert _twissdf.shape[0] > 0 , '>> twissLHCBeam: twiss table selection %r results to empty table!' % selection
 	_twissdf['beam'] = lbeam
@@ -110,7 +111,7 @@ def printLHCXsingScheme(mmad):
 
 def printLHCGlobalConfig(mmad):
     print('>>> LHC Beam Configuration:')
-    for v in ['NRJ','I_MO','ON_COLLISION','ON_BB_SWITCH','ON_BB_CHARGE']:
+    for v in LHCGlobals:
         print ('{:8s} = {:7.2f} '.format(v, mmad.globals[v]))
     print (' ')
     return
