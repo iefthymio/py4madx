@@ -83,6 +83,12 @@ def surveyLHC(mmad):
 	return pd.concat([survb1, survb2])
 
 def twissLHC(mmad, selection=r'.', fout=''):
+	''' 
+		Combined twiss of the two LHC beams.
+		Examples of selection:
+			selection = r'^ip[1258]'    							 # --- simple selection
+			selection = re.compile('|'.join(['^ip[1258]','^bbmk']))  # --- for multiple criteria
+	'''
 	b1df, s1df = twissLHCBeam(mmad, 'lhcb1', selection, fout.replace('.','_b1.'))
 	b2df, s2df = twissLHCBeam(mmad, 'lhcb2', selection, fout.replace('.','_b2.'))
 
