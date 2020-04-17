@@ -23,120 +23,42 @@ from matplotlib.tri import Triangulation
 from matplotlib.patches import Polygon
 from scipy import special
 
-import py4madx
-pmadx = py4madx.py4madx
+import pmadx
+import qslice
 
-def fnorm(x):
-    ''' normal function with zero mean and sigma=1 '''
-    return np.exp(-0.5*x*x)/np.sqrt(2*np.pi)
-
-def myerf(x): # --- Normal distribution integral (half range [0,inf]) with u=0, sigma=1
-    return 0.5*special.erf(x/np.sqrt(2)) 
-
-def arcerf(y): # --- Inverse error function of normal distribution (Quantile function)
-    return np.sqrt(2)*special.erfinv(2*y)
-
-def bari(y1, y2):
-    x1 = arcerf(y1)
-    x2 = arcerf(y2)
-    bari = np.abs(fnorm(x2)-fnorm(x1))/(y2-y1)
-    return bari
-
-def qslice(n):
-    '''
-        slice the z-distribuiton to equal charge N slices
-        returns DF with s positions and charge wrt center
-    '''
-    Nmax = 100
-    if n > Nmax :
-        print ('>>> slice : too many slices requested - reduced to 100')
-        n = 100
-    if n < 0 :
-        print ('>>> slice : n must be a positive number ! - set to 0')
-
-    spos = []
-    charge = []
-    scharge = 1.0/(2*n+1)       # -- equal charge per slice + central bin
-    y1 = 0.5*scharge
-    y2 = y1 + scharge
-    for i in range(1,n):
-        spos.append(bari(y1,y2))
-        y1 = y2
-        y2 = y2 + scharge
-        charge.append(scharge)
-    x = arcerf(y1)
-    # spos.append(np.exp(-0.5*x*x)/scharge/ractwopi)
-    spos.append(fnorm(x)/scharge)
-    charge.append(scharge)
-
-    df = pd.DataFrame()
-    df['spos'] = spos
-    df['charge'] = charge
-    return df
-
-def calculateXScheme(twdf, halo, ip):
-    ''' Calculate on_sep value to assure the correct hallo collisions in the non-xsing plane of ip'''
-    return
-
-def define_BB_el(bbconfig):
-    '''
-        Prepare the BB configuration
-        Input :
-            bbconf    : dictionary with IPs and number of HO collisions to consider
-                        if > 1, 2n+1 lenses are created spaced around the IP on equal charge distances.
-                        The central lens is at 1.0e-9 distance from IP
-        Returns:
-            bbdf      : dataframe with BB interactions for the ip
-                        columns : [ip, name, spos, charge]
-                        The name of the BB element is = ip{x}{l/r}_ho_{n}
-                        Empty DF if no HO defined.
-    '''
-    bbdfl = []
-    for ip in bbconfig:
-        nho = bbconfig[ip]
-        print ('>>> define_BB_el: nHO={} slices defined for {}'.format(nho,ip))
-        if nho == 0 :
+def define_BB_el(bbho={'ip1':0,'ip2':0,'ip5':0,'ip8':0}):
+    _tmp = pd.DataFrame()
+    for ip in bbho:
+        if bbho[ip] == 0 or bbho[ip]%2 == 0 :
             continue
-        elif nho % 2 == 0 :
-            continue
-        elif nho == 1 :
-            elname = ip.lower()+'ho_0'
-            _aux = pd.DataFrame({'ip':ip,'name':elname,'spos':[1.0e-9],'charge':1.0})
-            bbdfl.append(_aux)
-        elif (nho > 1) & (nho % 2 == 1) :
-            nsl = int(nho/2)
-            _sldf = qslice(nsl)
-            spos = _sldf.spos.values
-            chrg = _sldf.charge.values
-            eln = [ip.lower()+'ho_0',*[ip.lower()+'rho_'+str(j+1) for j in _sldf.index],*[ip.lower()+'lho_'+str(j+1) for j in _sldf.index]]
-            els = [1.0e-9, *spos, *-spos]
-            elch = [1.0/(2*nsl+1), *chrg, *chrg]
-            elip = [ip.lower()]*len(els)
-            _aux = pd.DataFrame({'ip':elip,'name':eln,'spos':els,'charge':elch})
-            bbdfl.append(_aux)
-    if len(bbdfl) > 0 :
-        bbdf = pd.concat(bbdfl,sort=True)
-        bbdf = bbdf.reset_index(drop=True)
-    else:
-        print ('>>> define_BB_el : no elements defined! Return empty df')
-        bbdf = pd.DataFrame()
-    return bbdf
+        _hodf = define_BBHO_ip(ip, bbho[ip])
+        _tmp = pd.concat([_tmp, _hodf], sort=True)
+    _tmp = _tmp.set_index('name')
+    return _tmp
 
-def install_BB_mark(mmad, bbdf, lbeam):
-    '''
-        Install BB markers in all IPs for the selected beam
-        BB marker names : bbmrk_b{beam}.ip{ip}{l/r}_ho_{n}
-    '''
-    ips = np.unique(bbdf.ip.values)
-    logger.info('Install_BB_mark: for beam {} and IPs {}'.format(lbeam,ips))
-    
+def define_BBHO_ip(ip, nho):
+    if nho == 1 :
+        elname = ip.lower()+'ho_0'
+        _aux = pd.DataFrame({'ip':ip,'name':elname,'spos':[1.0e-9],'charge':1.0})
+        return _aux
+    nsl = int(nho/2)
+    _sldf = qslice.qslice(nsl)
+    spos = _sldf.spos.values
+    chrg = _sldf.charge.values
+    eln = [ip.lower()+'ho_0',*[ip.lower()+'rho_'+str(j+1) for j in _sldf.index],*[ip.lower()+'lho_'+str(j+1) for j in _sldf.index]]
+    els = [1.0e-9, *spos, *-spos]
+    elch = [1.0/(2*nsl+1), *chrg, *chrg]
+    elip = [ip.lower()]*len(els)
+    _aux = pd.DataFrame({'ip':elip,'name':eln,'spos':els,'charge':elch})
+    return _aux
+
+def install_BB_mark(mmad, bbeldf, lbeam):
+        
     bm = lbeam.replace('lhc','')
     bdef = mmad.sequence[lbeam].beam
     sigz = bdef.sigt
-    print('Scale Spositions by sigz/2 = {} except the central one!'.format(sigz/2))
-    bbdf['spos'] = bbdf.apply(lambda row : row['spos']*sigz/2 if row['name'].find('_0')<0 else row['spos'], axis=1)
-    # incmd = [f'''install element=bbmrk_b1.{name}, class=bbmarker, at={spos}, from={ip};''' for name,spos,ip in zip(bbdf['name'],bbdf['spos'],bbdf['ip'])]
-    incmd = ['install element=bbmrk_{}.{}, class=bbmarker, at={}, from={};'.format(bm,row['name'],row['spos'],row['ip']) for i,row in bbdf.iterrows()]
+    bbeldf['spos'] = bbeldf.apply(lambda row : row.spos*sigz/2 if row.name.find('_0')<0 else row.spos, axis=1)
+    incmd = ['install element=bbmrk_{}.{}, class=bbmarker, at={}, from={};'.format(bm,i,row.spos,row.ip) for i,row in bbeldf.iterrows()]
     _dummy = '\n'.join(incmd)
     print('Install command : \n{}'.format(_dummy))
     mmad.input(f'''
@@ -150,7 +72,8 @@ def install_BB_mark(mmad, bbdf, lbeam):
     ''')
     return
 
-def calculate_BB_lens(mmad, bbdf, wbeam):
+
+def calculate_BB_lens(mmad, bbeldf, sbeam, wbeam):
     '''
     Calculate the BB lenses for all IPs of the selected beam
     Input:
@@ -163,24 +86,16 @@ def calculate_BB_lens(mmad, bbdf, wbeam):
                         where name has the format 'bb_b*.ip*{l/r}ho*' l=left(before) of IP, r=right(after) of IP
 
     '''
-    print ('>>> beambeam:calculate_BB_lens: wbeam={}, bbmarkers={}'.format(wbeam, bbdf.shape[0]))
-    sbeam = 'lhcb2'
-    bs = 'b2'
-    bw = 'b1'
-    sign_xsu = 1.0
-    if wbeam == 'lhcb2' :
-        sbeam = 'lhcb1'
-        sign_xsu = -1.0
-        bs = 'b1'
-        bw = 'b2'
-
-    twiss, _ = pmadx.twissLHC(mmad, option=r'^bbmrk_', fout='')
+    bs = sbeam.replace('lhc','')
+    bw = wbeam.replace('lhc','')
+    sign_xsu = 1.0 if wbeam == 'lhcb1' else -1.0
+    
+    twiss, _ = pmadx.twissLHC(mmad, selection=r'^bbmrk_', fout='')
     
     survdf = pmadx.surveyLHC(mmad)
     strongdf = survdf[survdf['beam'] == sbeam]
     weakdf = survdf[survdf['beam'] == wbeam]
 
-    # _stwdf = stdf[stdf['name'].str.contains('bbmrk')] # --- get the BBmarker elements of the strong beam
     mxbeam = mmad.sequence[sbeam].beam
     epsx = mxbeam.ex
     epsy = mxbeam.ey
