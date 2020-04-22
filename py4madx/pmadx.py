@@ -65,8 +65,8 @@ def twiss2df(twisstable):
 
 def table2df(twisstable):
 	_tdf = pd.DataFrame.from_dict(twisstable, orient='index').transpose()
-	_tdf['elname'] = _tdf['name'].apply(lambda x : x.split(':')[0])
-	return _tdf.set_index('elname')
+	#_tdf['elname'] = _tdf['name'].apply(lambda x : x.split(':')[0])
+	return _tdf.set_index('name')
 
 def mergeLHCBeamTwissTables(mmad, twissb1, twissb2):
 	t_b1 = mmad.table[twissb1].dframe()
