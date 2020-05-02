@@ -58,15 +58,21 @@ def removeElementsFromSeq(mmad, sequ, elclass, elptrn):
 def getMadGlobals(mmad, sletter=''):
 	return dict((i, mmad.globals[i]) for i in mmad.globals.keys() if i.find(sletter)== 0 )
 
-def twiss2df(twisstable):
+def twiss2df(twisstable, fullname=False):
 	_twdf = pd.DataFrame.from_dict(twisstable, orient='index').transpose()
-	_twdf['elname'] = _twdf['name'].apply(lambda x : x.split(':')[0])
+	if fullname :
+		_twdf['elname'] = _twdf['name']
+	else:
+		_twdf['elname'] = _twdf['name'].apply(lambda x : x.split(':')[0])
 	return _twdf.set_index('elname')
 
-def table2df(twisstable):
+def table2df(twisstable, fullname=False):
 	_tdf = pd.DataFrame.from_dict(twisstable, orient='index').transpose()
-	#_tdf['elname'] = _tdf['name'].apply(lambda x : x.split(':')[0])
-	return _tdf.set_index('name')
+	if fullname :
+		_tdf['elname'] = _tdf['name']
+	else:
+		_tdf['elname'] = _tdf['name'].apply(lambda x : x.split(':')[0])
+	return _tdf.set_index('elname')
 
 def mergeLHCBeamTwissTables(mmad, twissb1, twissb2):
 	t_b1 = mmad.table[twissb1].dframe()
