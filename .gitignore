@@ -5,3 +5,7 @@
 
 # --- all .pyc files
 *.pyc
+
+# --- some specific files
+
+qslicing.py
