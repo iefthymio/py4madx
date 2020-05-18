@@ -1,11 +1,30 @@
 #
-# --- BeamBeam Functions for cpymad
+# --- BeamBeam Functions for LHC studies
 #
 # (c) I.E - September 2019
 #
-# MADX scripts to run with cpymad
+# MADX scripts to run with cpymad 
 #
+# Entry functions:
+#   - define_BB_elements
+#           - define_BBho_ip, define_BBlr_ip
+#       return DF with the basic element parameters 
+#       bbeldf : elname(index), spos, charge, ip, type(ho/lr)
 #
+#   - define_BB_markers
+#       bbmkdf = bbeldf + nanme + beam
+#   - install_BB_markers
+#
+#   - define_BB_lenses
+#           - define_BB_markers
+#               bbmkdf = bbeldf + nanme + beam
+#           - install_BB_markers
+#           - survey_BB_markers
+#               survey_BB_markersIP
+#           - calculate_BB_lenses
+#           - install_BB_lenses
+
+Version = '2.00 - (ie) 18.05.2020'
 
 import os
 import shutil
@@ -13,394 +32,339 @@ import numpy as np
 import pandas as pd
 import subprocess
 import re
-
-import matplotlib
-import matplotlib.patches as patches
-import matplotlib.dates as md
-import matplotlib.pyplot as plt
-from matplotlib.lines import Line2D
-from matplotlib.tri import Triangulation
-from matplotlib.patches import Polygon
-from scipy import special
+import itertools
 
 import pmadx
 import qslice
 
-def define_BB_el(bbho={'ip1':0,'ip2':0,'ip5':0,'ip8':0}):
+# ------- Elements ---------------------
+
+def define_BB_elements(bbho={'ip1':0,'ip2':0,'ip5':0,'ip8':0},
+                       bblr={'ip1':[],'ip2':[],'ip5':[],'ip8':[]},
+                       sigmaz=1.0,
+                       lrsdist=26658.8832/35640*5):
+    lbbeldf = []
     _tmp = pd.DataFrame()
+    lbbeldf.append(_tmp)  
     for ip in bbho:
-        if bbho[ip] == 0 or bbho[ip]%2 == 0 :
+        if bbho[ip] == 0 :
             continue
-        _hodf = define_BBHO_ip(ip, bbho[ip])
-        _tmp = pd.concat([_tmp, _hodf], sort=True)
-    _tmp = _tmp.set_index('name')
+        _hodf = define_BBho_ip(ip, bbho[ip], sigmaz)
+        lbbeldf.append(_hodf)
+
+    for ip in bblr:
+        if bblr[ip] == 0 :
+            continue
+        _lrdf = define_BBlr_ip(ip, bblr[ip], lrsdist)
+        lbbeldf.append(_lrdf)
+    _tmp = pd.concat(lbbeldf, sort=False)
+    _tmp.set_index('elname', drop=False, inplace=True)
     return _tmp
 
-def define_BBHO_ip(ip, nho):
-    if nho == 1 :
-        elname = ip.lower()+'ho_0'
-        _aux = pd.DataFrame({'ip':ip,'name':elname,'spos':[1.0e-9],'charge':1.0})
-        return _aux
-    nsl = int(nho/2)
-    _sldf = qslice.qslice(nsl)
-    spos = _sldf.spos.values
-    chrg = _sldf.charge.values
-    eln = [ip.lower()+'ho_0',*[ip.lower()+'rho_'+str(j+1) for j in _sldf.index],*[ip.lower()+'lho_'+str(j+1) for j in _sldf.index]]
-    els = [1.0e-9, *spos, *-spos]
-    elch = [1.0/(2*nsl+1), *chrg, *chrg]
-    elip = [ip.lower()]*len(els)
-    _aux = pd.DataFrame({'ip':elip,'name':eln,'spos':els,'charge':elch})
+def define_BBho_ip(ip, nho, sigma):
+    side = {-1:'l', 1:'r', 0:''}
+    _aux = qslice.qslice(qtot=1.0, sigma=sigma, nslices=nho)
+    _aux['elname'] = _aux['id'].apply(lambda j: ip.lower()+side[np.sign(j)]+'ho_'+str(np.abs(j)))
+    _aux['ip'] = ip.lower()
+    _aux['type'] = 'ho'
     return _aux
 
-def install_BB_mark(mmad, bbeldf, lbeam):
-        
+def define_BBlr_ip(ip, bblr, sep):
+    spos = [sep*x for x in bblr]
+    chrg = np.ones(len(bblr))
+    eln = [*[ip.lower()+'l_'+str(np.abs(j)) for j in bblr if j < 0], 
+           *[ip.lower()+'r_'+str(np.abs(j)) for j in bblr if j > 0]]
+    elip = [ip.lower()]*len(bblr)
+    _aux = pd.DataFrame({'spos':spos,'charge':chrg,'id':bblr, 'elname':eln, 'ip':elip})
+    _aux['type'] = 'lr'
+    return _aux
+
+# ------- Markers -----------------------
+
+def install_BB_markers(mmad, bbeldf, lbeam, clean=False):
     bm = lbeam.replace('lhc','')
-    bdef = mmad.sequence[lbeam].beam
-    sigz = bdef.sigt
-    bbeldf['spos'] = bbeldf.apply(lambda row : row.spos*sigz/2 if row.name.find('_0')<0 else row.spos, axis=1)
-    incmd = ['install element=bbmrk_{}.{}, class=bbmarker, at={}, from={};'.format(bm,i,row.spos,row.ip) for i,row in bbeldf.iterrows()]
-    _dummy = '\n'.join(incmd)
-    print('Install command : \n{}'.format(_dummy))
+   
+    if clean :
+        pmadx.removeElementsFromSeq(mmad, lbeam, 'bbmarker', f'bbmrk_')
+    _mrkdf = bbeldf.copy()
+    _mrkdf['elname'] = _mrkdf.elname.apply(lambda x : 'bbmrk_'+x.replace('_',bm+'.'))
+    cmd = [f'install element={row.elname}, class=bbmarker, at={row.spos}, from={row.ip};' for i,row in _mrkdf.iterrows()]
+    _instcmd = '\n'.join(cmd)
     mmad.input(f'''
-        option, warn, info;
-        bbmarker : marker;
-        seqedit, sequence={lbeam};
-            {_dummy}
-            flatten;
-        endedit;
-        option, -warn, -info;
+    option, warn, info;
+    bbmarker : marker;
+    seqedit, sequence={lbeam};
+        {_instcmd}
+        flatten;
+    endedit;
+    option, -warn, -info;
     ''')
+    assert bbeldf.shape[0] == pmadx.countElementsInSeq(mmad, 'bbmrk', lbeam), \
+        f' {lbeam}: Number of installed bb markers  does not match that of bbel '
     return
 
+# ------- Survey -----------------------
 
-def calculate_BB_lens(mmad, bbeldf, sbeam, wbeam):
-    '''
-    Calculate the BB lenses for all IPs of the selected beam
-    Input:
-        bbdf            : df with the BB basic info 
-        wbeam           : the beam to consider (weak beam), format lhcb1/lhcb2
+def survey_BB_markers(mmad, ips):
+    _dflist = []
+    xoffset = {'ip1':-0.097, 'ip2':0.097, 'ip5':-0.097, 'ip8':0.097}
+    for lbeam, ip in itertools.product(['lhcb1', 'lhcb2'], ips):
+        _dflist.append(survey_BB_markersIP(mmad, ip, xoffset[ip], lbeam))
+    return pd.concat(_dflist)  
 
-    Returns:
-        bblensdf        : dataframe with the BB lense data
-                        ['name','sigx','sigy','xma','yma','charge','spos','ip','beam']
-                        where name has the format 'bb_b*.ip*{l/r}ho*' l=left(before) of IP, r=right(after) of IP
-
-    '''
-    bs = sbeam.replace('lhc','')
-    bw = wbeam.replace('lhc','')
-    sign_xsu = 1.0 if wbeam == 'lhcb1' else -1.0
-    
-    twiss, _ = pmadx.twissLHC(mmad, selection=r'^bbmrk_', fout='')
-    
-    survdf = pmadx.surveyLHC(mmad)
-    strongdf = survdf[survdf['beam'] == sbeam]
-    weakdf = survdf[survdf['beam'] == wbeam]
-
-    mxbeam = mmad.sequence[sbeam].beam
-    epsx = mxbeam.ex
-    epsy = mxbeam.ey
-
-    bblensdf = {'name':[],'xma':[],'yma':[],'sigx':[],'sigy':[],'charge':[],'spos':[],'ip':[],'xma0':[]}
-    for i, row in twiss[twiss['beam']==sbeam].iterrows(): 
-        print ('\t - [{}] sbeam el={}, position={}'.format(i, row['name'], row['s']))
-        name = row['name'].split(':')[0]  
-        nambb, nbbel = name.split('.')
-        print('\t - bbdf name to search :{}'.format(nbbel))
-
-        # -- marker name bbmrk_b{beam}.ip{ip}{l/r}_ho_{n}
-        name_weak = name.replace(bs, bw)
-        namho0_s = nambb + '.' + nbbel[0:3] + 'ho_0'
-        namho0_w = namho0_s.replace(bs, bw)
-        x_su = strongdf.loc[name].x - weakdf.loc[name_weak].x - \
-            (strongdf.loc[namho0_s].x - weakdf.loc[namho0_w].x)
-        # print(x_su, 'nam:', strongdf.loc[name].x, weakdf.loc[name_weak].x, 'ho0:', strongdf.loc[namho0_s].x, weakdf.loc[namho0_w].x)
-        _aux = bbdf[bbdf['name'] == nbbel]
-        if not _aux.empty :
-            j = _aux['ip'].values[0]
-            s = _aux['spos'].values[0]
-            chrg = _aux['charge'].values[0]
-            print ('\t - BB element found in df : {} {} {}'.format(j,s,chrg))
-        else:
-            print ('\t - Not matching BB element found in df!!!')
-            continue
-        # bbnam.append('bb_'+lbeam.replace('lhc','')+'.'+nbbel)
-        bblensdf['name'].append(name_weak.replace('bbmrk','bb'))
-        bblensdf['sigx'].append(np.sqrt(epsx * row['betx']))
-        bblensdf['sigy'].append(np.sqrt(epsy * row['bety']))
-        bblensdf['xma0'].append(row['x'])
-        bblensdf['xma'].append(row['x']-x_su*sign_xsu)
-        bblensdf['yma'].append(row['y'])
-        bblensdf['ip'].append(j)
-        bblensdf['charge'].append(chrg)
-        bblensdf['spos'].append(s)
-
-    bblensdf = pd.DataFrame(bblensdf)
-    bblensdf['beam'] = wbeam
-    print ('elements defined : {}'.format(bblensdf))
-    return bblensdf
-
-def install_BB_lens(mmad, ldf, lbeam):
-    ''' Install the BB lenses with parameters in ldf for lbeam '''
-
-    print ('>>> Install_BB_lenses: for beam {}'.format(lbeam))
-    bldf = ldf[ldf['beam'] == lbeam ]
-    if bldf.empty:
-        print ('>>> No lenses defined for beam = {}'.format(lbeam))
-        return
-
-    bbeldef = ['{} : beambeam, sigx={}, sigy={},xma={}, yma={},bbshape=1,bbdir=-1,charge:={}*on_bb_charge;'.format(
-        row['name'],row['sigx'],row['sigy'],row['xma'],row['yma'],row['charge']) for i,row in bldf.iterrows()]
-    bbelpar = ['install, element={}, at={}, from={};'.format(row['name'],row['spos'],row['ip']) for i,row in bldf.iterrows()]
-
-    print ('>>> {} BB elements defined - going to insert them into the sequence for beam {}'.format(len(bbeldef),lbeam))
-
-    _def = '\n'.join(bbeldef)
-    _ins = '\n'.join(bbelpar)
-    print ('\t BBel definiton command : \n\t {}'.format(_def))
-    print ('\t BBel install command : \n\t {}'.format(_ins))
-
+def survey_BB_markersIP(mmad, ip, x0, lbeam):
+    suir = 'su'+ip.replace('p','r')+lbeam[-2:]
+    ipn = int(ip.replace('ip',''))
+    if lbeam == 'lhcb2' :
+        x0 = -1.0*x0
     mmad.input(f'''
-        option, warn, info;
-        {_def}
-        seqedit, sequence={lbeam};
-            flatten;
-            {_ins}
-            flatten;
-        endedit;
-        option, -warn, -info;
+    delete,table={suir};
+    select,flag=survey,clear;
+    select,flag=survey,class=bbmarker;
+    use,sequence={lbeam},range=e.ds.l{ipn}.{lbeam[-2:]}/s.ds.r{ipn}.{lbeam[-2:]};
+    survey,x0={x0},file=surveyaux.tfs;
+    readmytable,file=surveyaux.tfs,table={suir};
     ''')
-    return
+    _aux = pmadx.twiss2df(mmad.table[suir])
+    _aux['beam'] = lbeam
+    return _aux
 
-def define_BB_LensesAtIP(mmad, ip, bbel, option='LAST'):
-    ''' Define the BB lenses for an IP
-            - alternate b1/b2 until the orbit doesn't change
-        Input :
-            mmad     the MADX instance
-            bbel     DF with the BB names and relative positions for the IP
-            option   LAST return the info from the initial and final iteration
-                     ALLL retrun the info for each iteration
-        Return :
-            bbtws    DF list with the Twiss tables for the iterations
-            bbsum    DF list with the Twiss summ tables for the iterations
-            bblen    DF list with the BB lenses definition for the iterations
-    '''
-
-    bbtws = []
-    bbsum = []
-    bblen = []
-    bbsrv = []
-
-    print ('>>> define_BB_LensesAtIP : ip={}'.format(ip))
-    # --- remove any BB markers or lenses at the IP
-    # n = pmadx.countElementsInSeq(mmad, ['bbmrk',ip], lb)
-    # n = pmadx.countElementsInSeq(mmad, ['bb_',ip], lb)
-    for lb in ['lhcb1','lhcb2']:
-        bm = lb.replace('lhc','')
-        print ('\t - [{}] : remove existing bb markers and elements, and install {} new BB markers !'.format(lb, bbel.shape[0]))
-        pmadx.removeElementsFromSeq(mmad, lb, 'bbmarker', 'bbmrk_{}.{}'.format(bm, ip))
-        pmadx.removeElementsFromSeq(mmad, lb, 'beambeam', 'bb_{}.{}'.format(bm, ip))
-        install_BB_mark(mmad, bbel, lb)
-        n = pmadx.countElementsInSeq(mmad, ['bbmrk',ip], lb)
-        assert bbel.shape[0] == n, \
-            'Number of installed markers {} does not match that of bbel {} '.format(n, bbel.shape[0])
-    
-    print ('\t - initial twiss')
-
-    twissb1, summb1 = pmadx.twissLHCBeam(mmad, 'lhcb1', option=r'^ip|bbmrk_')
-    twissb2, summb2 = pmadx.twissLHCBeam(mmad, 'lhcb2', option=r'^ip|bbmrk_')
-    #print ('\t BB markers in twiss : b1={} b2={}'.format(twissb1[twissb1['name'].str.find('bbmrk_')>=0].shape[0],
-    #                                                     twissb2[twissb2['name'].str.find('bbmrk_')>=0].shape[0]))
-    print ('\t BB markers in twiss : b1={} b2={}'.format(twissb1[twissb1.index.str.startswith('bbmrk_')].shape[0],
-                                                         twissb2[twissb2.index.str.startswith('bbmrk_')].shape[0]))
-
-    _auxt = pd.concat([twissb1, twissb2])
-    _auxt['iter'] = -1
-    bbtws.append(_auxt)
-
-    _auxs = pd.concat([summb1, summb2])
-    _auxs['iter'] = -1
-    bbsum.append(_auxs)
-
-    survdf = pmadx.surveyLHC(mmad)
-    survdf['iter'] = -1
-    bbsrv.append(survdf)
-
-    x0b1 = twissb1.loc[ip].x; x0b2 = twissb2.loc[ip].x
-    y0b1 = twissb1.loc[ip].y; y0b2 = twissb2.loc[ip].y
-    print ('\t Initial beam coordinates at IP:')
-    print ('\t\t x = {} {} y={} {}'.format(x0b1, x0b2, y0b1, y0b2))
-
-    mmad.globals.on_bb_charge = 1
-    print('\t flag ON_BB_CHARGE set to 1')
-    for j in np.arange(0,10,1):
-        bl1 = calculate_BB_lens(mmad, bbel, twissb2, 'lhcb1')
-        # apply_surv_corr_BB_lens(twissb1, twissb2, bl1,'lhcb1')
-        install_BB_lens(mmad, bl1, 'lhcb1')
-        twissb1, summb1 = pmadx.twissLHCBeam(mmad, 'lhcb1', option=r'^ip|bb')
-        n = pmadx.countElementsInSeq(mmad, ['bbmrk', ip], 'lhcb1')
-        assert bbel.shape[0] == n, \
-            'lhcb1 : bb markers in sequence {} - does not match that of bbel {}'.format(n, bbel.shape[0])
-
-        xb1 = twissb1.loc[ip].x
-        yb1 = twissb1.loc[ip].y
-
-        bl2 = calculate_BB_lens(mmad, bbel, twissb1, 'lhcb2')
-        # apply_surv_corr_BB_lens(twissb1, twissb2, bl2, 'lhcb2')
-        install_BB_lens(mmad, bl2, 'lhcb2')
-        twissb2, summb2 = pmadx.twissLHCBeam(mmad, 'lhcb2', option=r'^ip|bb')
-        n = pmadx.countElementsInSeq(mmad, ['bbmrk', ip], 'lhcb2')
-        assert bbel.shape[0] == n, \
-            'lhcb2 : bb markers in sequence {} - does not match that of bbel {}'.format(n, bbel.shape[0])
-
-        xb2 = twissb2.loc[ip].x
-        yb2 = twissb2.loc[ip].y
-
-        print (' [{}] : x = {} {}  y={} {}'.format(j,xb1, xb2, yb1, yb2))
-
-        _auxt = pd.concat([twissb1, twissb2]); _auxt['iter'] = j
-        _auxs = pd.concat([summb1, summb2]);   _auxs['iter'] = j
-        _tmp = pd.concat([bl1, bl2]);  _tmp['iter'] = j
-
-        if option == 'ALL' :
-            bbtws.append(_auxt)
-            bbsum.append(_auxs)
-            bblen.append(_tmp)
-
-        if (xb1-x0b1)**2 + (xb2-x0b2)**2 + (yb1-y0b1)**2 + (yb2-y0b2)**2 < 1.0e-14 :
-            print('\t - convergence reached - end of loop')
-            pmadx.removeElementsFromSeq(mmad, 'lhcb1', 'bbmarker', 'bbmrk_b1.{}'.format(ip))
-            pmadx.removeElementsFromSeq(mmad, 'lhcb2', 'bbmarker', 'bbmrk_b2.{}'.format(ip))
-            break
-        x0b1 = xb1; y0b1 = yb1
-        x0b2 = xb2; y0b2 = yb2
+def calculate_x_su(bbeldf, survdf):
+    survb1 = survdf[survdf['beam'] == 'lhcb1']
+    survb2 = survdf[survdf['beam'] == 'lhcb2']
         
-        print ('\t - removing beambeam elements from both sequences')
-        for bm in ['b1','b2']:
-            pmadx.removeElementsFromSeq(mmad, 'lhc'+bm, 'beambeam', 'bb_{}.{}'.format(bm, ip))
-            assert pmadx.countElementsInSeq(mmad, ['bb_'], 'lhc'+bm) == 0, \
-                'lhc{} : bb elements still present in sequence at loop end!'.format(bm)
+    namho0b1 = 'bbmk_ho'+ipn+'b1_0'
+    namho0b2 = 'bbmk_ho'+ipn+'b2_0'
 
-    if option == 'LAST':
-        bbtws.append(_auxt)
-        bbsum.append(_auxs)
-        bblen.append(_tmp)
+    x_su = (survb2.loc[namb2].x - survb1.loc[namb1].x) - (survb2.loc[namho0b2].x - survb1.loc[namho0b1].x)
+    return x_su
 
-    return pd.concat(bbtws), pd.concat(bbsum), pd.concat(bblen), survdf
+# ------- Lenses -----------------------
 
-def _define_BB_Lenses(mmad, bbel, option='LAST'):
-    '''
-        Define the BB lenses for a given configuration.
-         - Loop over defined IPs
-         - Alternate lhcb1/lhcb2 lenses to verify orbit convergence (strong-strong approx.)
-         - for option=LAST, return only the first (iter=-1, no bb) and final twiss data  
-    '''
-    if bbel.empty :
-        print ('>>> define_BB_Lenses: input BB elements DF is empty! ... do nothing! ')
-        return pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
-
-    btwiss = []
-    btsumm = []
-    bblens = []
-
-    ipsbb = np.unique(bbel.ip.values)
-    print ('>>> define_BB_Lenses: define BB lenses for both beams at IPs : {} '.format(ipsbb))
-    for ip in ipsbb:
-        a, b, c,d = define_BB_LensesAtIP(mmad, ip, bbel[bbel['ip'] == ip], option)
-        btwiss.append(a); btsumm.append(b), bblens.append(c), bbsurv.append(d)
-    return pd.concat(btwiss), pd.concat(btsumm), pd.concat(bblens)
-
-def define_BB_Lenses(mmad, bbel, option='LAST'):
-    '''
-        Define the BB lenses for a given configuration.
-         - Alternate lhcb1/lhcb2 lenses to verify orbit convergence (strong-strong approx.)
-         - for option=LAST, return only the first (iter=-1, no bb) and final twiss data 
-        
-        Returns : twiss, summ and bblens dataframes with the results
-    '''
-    if bbel.empty :
-        print ('>>> define_BB_Lenses: input BB elements DF is empty! ... do nothing! ')
-        return pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
-
-    ipsbb = np.unique(bbel.ip.values)
-    print ('>>> define_BB_Lenses: define BB lenses for both beams at IPs : {} '.format(ipsbb))
+def define_BB_lenses(mmad, bbeldf, option='LAST'):
+ 
+    ipsbb = np.unique(bbeldf.ip.values)
     
-    bbtws = []
-    bbsum = []
-    bblen = []
-    bbsrv = []
+    ltwiss = []
+    ltsumm = []
+    lbblen = []
 
-    for lb in ['lhcb1','lhcb2']:
-        bm = lb.replace('lhc','')
-        print ('\t - [{}] : remove existing bb markers and elements, and install {} new BB markers !'.format(lb, bbel.shape[0]))
-        pmadx.removeElementsFromSeq(mmad, lb, 'bbmarker', 'bbmrk_{}'.format(bm))
-        pmadx.removeElementsFromSeq(mmad, lb, 'beambeam', 'bb_{}'.format(bm))
-        install_BB_mark(mmad, bbel, lb)
-        n = pmadx.countElementsInSeq(mmad, ['bbmrk'], lb)
-        assert bbel.shape[0] == n, \
-            '{} : Number of installed markers {} does not match that of bbel {} '.format(lb, n, bbel.shape[0])
+    install_BB_markers(mmad, bbeldf, 'lhcb1', clean=True)
+    install_BB_markers(mmad, bbeldf, 'lhcb2', clean=True)
     
-    print ('\t - initial twiss')
-    twiss0, summ0 = pmadx.twissLHC(mmad, option=r'^ip|bbmrk_', fout='')
-    print ('\t BB markers in LHC twiss : b1/b2 = {}'.format(twiss0[twiss0.index.str.startswith('bbmrk_')].shape[0]))
+    twiss0, tsumm0 = pmadx.twissLHC(mmad, selection=re.compile('|'.join(['^ip[12358]','^bbmrk_'])), fout='')
     twiss0['iter'] = -1
-    summ0['iter'] = -1
+    tsumm0['iter'] = -1
+    ltwiss.append(twiss0)
+    ltsumm.append(tsumm0)
+    twiss0.to_pickle('twissbb0.pkl')
+    tsumm0.to_pickle('tsummbb0.pkl')
+
+    survdf = survey_BB_markers(mmad, ipsbb)
+    survdf.to_pickle('survdbb0.pkl')
+
+    bblensb1 = calculate_BB_lenses(mmad, bbeldf, 'lhcb1', 'lhcb2', twiss0, tsumm0, survdf)
+    bblensb2 = calculate_BB_lenses(mmad, bbeldf, 'lhcb2', 'lhcb1', twiss0, tsumm0, survdf)
+    bblens = pd.concat([bblensb1, bblensb2])
+    bblens['iter'] = -1
+    lbblen.append(bblens)
+    bblens.to_pickle('bblens0.pkl')
+
+    madxbbelb1 = init_BB_lenses(mmad, bblensb1)
+    madxbbelb2 = init_BB_lenses(mmad, bblensb2)
+    
+    install_BB_lenses(mmad, madxbbelb1, 'lhcb1')
+    install_BB_lenses(mmad, madxbbelb2, 'lhcb2')
+    assert bbeldf.shape[0] == pmadx.countElementsInSeq(mmad, 'bb_', 'lhcb1'), \
+        f' lhcb1: Number of installed bb markers  does not match that of bbel' 
+    assert bbeldf.shape[0] == pmadx.countElementsInSeq(mmad, 'bb_', 'lhcb2'), \
+        f' lhcb1: Number of installed bb markers  does not match that of bbel' 
 
     ips0, xip0, yip0 = pmadx.getLHCBeamPosAtIP(twiss0)
-    [print('{} : x = {} --> sep0_x = {} y={} -->sep0_y = {}'.format(ip.upper(), x, np.diff(x), y, np.diff(y))) for ip,x,y in zip(ips0,xip0,yip0)]
+    np.set_printoptions(formatter={'float': '{: 12.5g}'.format})
+    [print(f'{ip} : x = {x} --> sep0_x = {np.diff(x)} y={y} -->sep0_y = {np.diff(y)}') for ip,x,y in zip(ips0,xip0,yip0)]
 
     mmad.globals.on_bb_charge = 1
-    print('\t flag ON_BB_CHARGE set to 1')
 
-    for j in np.arange(0,10,1):
-        print('\n>>>> loop [{}]\n'.format(j))
-        bblensb1 = calculate_BB_lens(mmad, bbel, 'lhcb1')
-        bblensb2 = calculate_BB_lens(mmad, bbel, 'lhcb2')
-        bblens = pd.concat([bblensb1, bblensb2])
+    enable_BB_lenses(mmad, madxbbelb1['qflag'])
+    enable_BB_lenses(mmad, madxbbelb2['qflag'])
 
-        install_BB_lens(mmad, bblens, 'lhcb1')
-        install_BB_lens(mmad, bblens, 'lhcb2')
+    delta = 1.0e14
+    j = 0
+    while delta > 1.0e-14:
+        print(f'\n>>>> loop [{j}]\n')
+        
+        twiss_j, tsumm_j = pmadx.twissLHC(mmad, selection=re.compile('|'.join(['^ip[12358]','^bbmrk_','^bb_'])), fout='')
+        twiss_j['iter'] = j
+        tsumm_j['iter'] = j
+        twiss_j.to_pickle(f'twissbb_{j}.pkl')
+        tsumm_j.to_pickle(f'tsummbb_{j}.pkl')
 
-        twiss_j, summ_j = pmadx.twissLHC(mmad, option=r'^ip|bb')
-        n = pmadx.countElementsInSeq(mmad, ['bbmrk'], 'lhcb1')
-        assert bblensb1.shape[0] == n, \
-            'lhcb1 : bb markers in sequence {} - does not match that of bbel {}'.format(n, bblensb1.shape[0])
-        n = pmadx.countElementsInSeq(mmad, ['bbmrk'], 'lhcb2')
-        assert bblensb2.shape[0] == n, \
-            'lhcb2 : bb markers in sequence {} - does not match that of bbel {}'.format(n, bblensb2.shape[0])
+        bblensb1_j = calculate_BB_lenses(mmad, bbeldf, 'lhcb1', 'lhcb2', twiss0, tsumm0, survdf)
+        bblensb2_j = calculate_BB_lenses(mmad, bbeldf, 'lhcb2', 'lhcb1', twiss0, tsumm0, survdf)
+        bblens_j = pd.concat([bblensb1_j, bblensb2_j])
+        bblens_j['iter'] = j
+        bblens_j.to_pickle(f'bblens_{j}.pkl')
+
+        update_BB_lenses(mmad, bblensb1_j)
+        update_BB_lenses(mmad, bblensb2_j)
 
         ips, xip, yip = pmadx.getLHCBeamPosAtIP(twiss_j)
-        [print('{} : x = {} --> sep0_x = {} y={} -->sep0_y = {}'.format(i.upper(), x, np.diff(x), y, np.diff(y))) for i,x,y in zip(ips,xip,yip)]
+        [print(f'{i} : x = {x} --> sep0_x = {np.diff(x)} y={y} -->sep0_y = {np.diff(y)}') for i,x,y in zip(ips,xip,yip)]
         
-        bblens['iter'] = j
-        twiss_j['iter'] = j
-        summ_j['iter'] = j
         if option == 'ALL' :
-            bbtws.append(twiss_j)
-            bbsum.append(summ_j)
-            bblen.append(bblens)
+            lbblen.append(bblens_j)
+            ltwiss.append(twiss_j)
+            ltsumm.append(tsumm_j)
 
         delta_x = np.asarray(xip).ravel() - np.asarray(xip0).ravel()
         delta_y = np.asarray(yip).ravel() - np.asarray(yip0).ravel()
         delta = np.dot(delta_x, delta_x) + np.dot(delta_y, delta_y)
-        if delta < 1.0e-14 :
-            print('\t - convergence reached - end of loop')
-            pmadx.removeElementsFromSeq(mmad, 'lhcb1', 'bbmarker', 'bbmrk_')
-            pmadx.removeElementsFromSeq(mmad, 'lhcb2', 'bbmarker', 'bbmrk_')
-            break
+        
         xip0 = xip
         yip0 = yip
-        
-        print ('\t - removing beambeam elements from both sequences')
-        pmadx.removeElementsFromSeq(mmad, 'lhcb1', 'beambeam', 'bb_')
-        pmadx.removeElementsFromSeq(mmad, 'lhcb2', 'beambeam', 'bb_')
+        j += 1
 
+    print(f'\t - convergence reached after {j} iterrations')
+    pmadx.removeElementsFromSeq(mmad, 'lhcb1', 'bbmarker', 'bbmrk_')
+    pmadx.removeElementsFromSeq(mmad, 'lhcb2', 'bbmarker', 'bbmrk_')
+    
     if option == 'LAST':
-        bbtws.append(twiss_j)
-        bbsum.append(summ_j)
-        bblen.append(bblens)
+        ltwiss.append(twiss_j)
+        ltsumn.append(tsumm_j)
+        lbblen.append(bblens_j)
 
-    return pd.concat(bbtws), pd.concat(bbsum), pd.concat(bblen)
+    return pd.concat(ltwiss), pd.concat(ltsumm), pd.concat(lbblen), survdf
 
+def calculate_BB_lenses(mmad, bbeldf, lbeamw, lbeams, twissdf, tsummdf, survdf):
+
+    bnw = lbeamw.replace('lhc','')
+    bns = lbeams.replace('lhc','')
+
+    twissw = twissdf[twissdf['beam'] == lbeamw]
+    twisss = twissdf[twissdf['beam'] == lbeams]
+    tsummw = tsummdf.loc[lbeamw]
+    tsumms = tsummdf.loc[lbeams]
+
+    egxw = tsummw.ex
+    egyw = tsummw.ey
+    egxs = tsumms.ex
+    egys = tsumms.ey
+
+    _bblensdf = bbeldf.copy()
+    _bblensdf['namew'] = _bblensdf.elname.apply(lambda x : x.replace('_',bnw+'.'))
+    _bblensdf['markerw'] = _bblensdf.elname.apply(lambda x : 'bbmrk_'+x.replace('_',bnw+'.'))
+    _bblensdf['markers'] = _bblensdf.elname.apply(lambda x : 'bbmrk_'+x.replace('_',bns+'.'))
+    _bblensdf['lens'] = _bblensdf.markerw.apply(lambda x : x.replace('bbmrk_','bb_'))
+
+    _bblensdf['sigx'] = _bblensdf.markers.apply(lambda x : np.sqrt(egxs*twisss.loc[x].betx))
+    _bblensdf['sigy'] = _bblensdf.markers.apply(lambda x : np.sqrt(egys*twisss.loc[x].bety))
+
+    def x_su(elname, ip, survdf):
+        survb1 = survdf[survdf['beam'] == 'lhcb1']
+        survb2 = survdf[survdf['beam'] == 'lhcb2']
+            
+        namho0b1 = 'bbmrk_'+ip+'hob1.0'
+        namho0b2 = 'bbmrk_'+ip+'hob2.0'
+        namb1 = 'bbmrk_'+elname.replace('_','b1.')
+        namb2 = 'bbmrk_'+elname.replace('_','b2.')
+
+        x_su = (survb2.loc[namb2].x - survb1.loc[namb1].x) - (survb2.loc[namho0b2].x - survb1.loc[namho0b1].x)
+        return x_su
+
+    _bblensdf['x_su'] = _bblensdf.apply(lambda row: x_su(row['elname'], row['ip'], survdf), axis=1)
+    if lbeamw == 'lhcb1' :
+        _bblensdf['xma'] = _bblensdf.apply(lambda row: twisss.loc[row['markers']].x + row['x_su'], axis=1)
+    else:
+        _bblensdf['xma'] = _bblensdf.apply(lambda row: twisss.loc[row['markers']].x - row['x_su'], axis=1)
+    _bblensdf['yma'] = _bblensdf.markers.apply(lambda x : twissdf.loc[x].y)
+    _bblensdf['lbeamw'] = lbeamw
+    _bblensdf['lbeams'] = lbeams
+    return _bblensdf
+
+def init_BB_lenses(mmad, bblensdf):
+    
+    bblpar = []
+    bbldef = []
+    bblins = []
+    qflags = []
+       
+    for i, row in bblensdf.iterrows(): 
+        qbb = row.charge
+        _name = row.namew
+        _qflag = 'ON_BB_Q'+_name.upper()
+        qflags.append(f'{_qflag}')
+        bblpar.append(f'''sigx_{_name} = {row.sigx:<15.8g}; sigy_{_name} = {row.sigy:<15.8g}; xma_{_name} = {row.xma:<15.8g}; yma_{_name} = {row.yma:<15.8g};''')
+        # bbldef.append(f'''bb_{_name}: beambeam, charge:={qbb}*{_qflag}, sigx:=sigx_{_name}, sigy:=sigy_{_name}, xma:=xma_{_name}, yma:=yma_{_name}, bbshape=1, bbdir=-1;''')
+        bbldef.append(f'''bb_{_name}: beambeam, charge:={qbb}*{_qflag}, sigx:=sigx_{_name}, sigy:=sigy_{_name}, xma:=xma_{_name}, yma:=yma_{_name}, bbshape=1, bbdir=-1;''')
+        bblins.append(f'''install, element=bb_{_name},at={row.spos},from={row.ip};''')
+
+    bblenses = {}
+    bblenses['elpar'] = bblpar
+    bblenses['eldef'] = bbldef
+    bblenses['elins'] = bblins
+    bblenses['qflag'] = qflags
+    return bblenses
+
+def disable_BB_lenses(mmad, qflags):
+
+    _qval = [f'{q}=0;' for q in qflags]
+    _mcmd = '\n'.join(_qval)
+    mmad.input(f'''
+    option, warn, info;
+    {_mcmd}
+    option, -warn, -info;
+    ''')
+    return
+
+def enable_BB_lenses(mmad, qflags):
+
+    _qval = [f'{q}=1;' for q in qflags]
+    _mcmd = '\n'.join(_qval)
+    mmad.input(f'''
+    option, warn, info;
+    {_mcmd}
+    option, -warn, -info;
+    ''')
+    return
+
+def install_BB_lenses(mmad, madxbbel, lbeam):
+
+    _cmd_bbldef = '\n'.join(madxbbel['elpar'])
+    _cmd_bblele = '\n'.join(madxbbel['eldef'])
+    _cmd_bblins = '\n'.join(madxbbel['elins'])
+    qflags0 = [ f'{x} = 0;' for x in madxbbel['qflag']]
+    _cmd_qfzero = '\n'.join(qflags0)
+    mmad.input(f'''
+    option, echo, warn, info;
+    {_cmd_qfzero}
+    {_cmd_bbldef}
+    {_cmd_bblele}
+    seqedit, sequence={lbeam};
+    flatten;
+    {_cmd_bblins}
+    flatten;
+    endedit;
+    option, -echo, -warn, -info;
+    ''')
+    return
+
+def update_BB_lenses(mmad, bblensdf):
+    bblpar = []
+    for i, row in bblensdf.iterrows(): 
+        qbb = row.charge
+        _name = row.namew
+        bblpar.append(f'''sigx_{_name} = {row.sigx:<15.8g}; sigy_{_name} = {row.sigy:<15.8g}; xma_{_name} = {row.xma:<15.8g}; yma_{_name} = {row.yma:<15.8g};''')
+
+    _cmd_bblpar = '\n'.join(bblpar)
+    mmad.input(f'''
+    option, echo, warn, info;
+    {_cmd_bblpar}
+    option, -echo, -warn, -info;
+    ''')
+    return
+
+# ------- Prepare SixTrack -----------------------
 
 def sixtrack_Input_BBLenses(mmad, btwdf, lbeam, ibeco=1, ibtyp=0, lhc=2, ibbc=0):
     ''' Generate the SixTrack Input for the bblens and lbeam
@@ -420,7 +384,7 @@ def sixtrack_Input_BBLenses(mmad, btwdf, lbeam, ibeco=1, ibtyp=0, lhc=2, ibbc=0)
     bblock.append(bblock_head)
     fout.write(bblock_head)
 
-    # --- use the twiss of tee two beams to calculate the BB lense parameters
+    # --- use the twiss of the two beams to calculate the BB lense parameters
     sbeam = 'lhcb2' if lbeam == 'lhcb1' else 'lhcb1'
     for i, row in btwdf[btwdf['beam'] == lbeam].iterrows():
         name = row['name'].split(':')[0]
