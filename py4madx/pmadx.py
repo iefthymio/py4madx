@@ -6,19 +6,26 @@
 # MADX scripts to run with cpymad
 #
 
+Version = '2.00 - (ie) 18.05.2020'
+
 import os
 import numpy as np
 import pandas as pd
 
 LHCXsingKnobs = ['on_x1', 'on_sep1', 'on_o1', \
-				'on_x2', 'on_sep2', 'on_o2', 'on_oe2', 'on_a2', \
-				'on_x5', 'on_sep5', 'on_o5', 'on_ov5', \
-				'on_x8', 'on_sep8', 'on_o8',           'on_a8']
+				 'on_x2', 'on_sep2', 'on_o2', 'on_oe2', 'on_a2', \
+				 'on_x5', 'on_sep5', 'on_o5', 'on_ov5', \
+				 'on_x8', 'on_sep8', 'on_o8',           'on_a8',\
+				 'on_alice', 'on_lhcb']
 
 LHCGlobals = ['NRJ','I_MO','ON_COLLISION','ON_BB_SWITCH','ON_BB_CHARGE']
 
+ips = ['ip1','ip2','ip3','ip5','ip8']
+
 def countElementsInSeq(mmad, elnames, seq):
 	elist = mmad.sequence[seq].element_names()
+	if type(elnames) != list:
+		elnames = [elnames]
 	f_elist = [e for e in elist if all(e.find(s)>=0 for s in elnames)]
 	return len(f_elist)
 
@@ -27,13 +34,16 @@ def getLHCBeamSigmaAtIP(mmad, twissdf, ip, lbeam):
 	epsx = beamdef.ex
 	epsy = beamdef.ey
 	_tmp = twissdf[twissdf['beam'] == lbeam]
-	return np.sqrt(_tmp.loc[ip].betx * epsx), np.sqrt(_tmp.loc[ip].bety * epsy)
+	return np.sqrt(_tmp.loc[ip].betx * epsx), np.sqrt(_tmp.loc[ip].bety * epsy) 
 
-def getLHCBeamPosAtIP(twissdf, lbeam):
-	ips = ['ip1','ip2','ip3','ip5','ip8']
-	_tmp = twissdf[twissdf['beam'] == lbeam]
-	xip = [_tmp.loc[i].x.values for i in ips]
-	yip = [_tmp.loc[i].y.values for i in ips]
+def getLHCBeamPosAtIP(twissdf, lbeam='ALL'):
+	if lbeam in ['lhcb1','lhcb2']:
+		_tmp = twissdf[twissdf['beam'] == lbeam]
+		xip = [_tmp.loc[i].x for i in ips]
+		yip = [_tmp.loc[i].y for i in ips]
+	else:
+		xip = [twissdf.loc[i].x.values for i in ips]
+		yip = [twissdf.loc[i].y.values for i in ips]
 	return ips, xip, yip   
 
 def removeElementsFromSeq(mmad, sequ, elclass, elptrn):
