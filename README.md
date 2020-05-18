@@ -22,10 +22,15 @@ pip install --upgrade --user git+https://github.com/iefthymio/py4madx.git
 ### Usage
 
 ```
-import py4madx as pmadx
+import py4madx
+from py4madx import pmadx
+from py4madx import beambeam
+from py4madx import qslice
 
-pmadx.my_cool_test_method()
+py4madx.my_cool_test_method()
 It works!
+
+pmadx.Version
 ```
 
 ## Acknowledgments
