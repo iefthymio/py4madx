@@ -8,21 +8,20 @@
 # Entry functions:
 #   - define_BB_elements
 #           - define_BBho_ip, define_BBlr_ip
-#       return DF with the basic element parameters 
+#       returns DF with the basic parameters of each bb element
 #       bbeldf : elname(index), spos, charge, ip, type(ho/lr)
 #
-#   - define_BB_markers
-#       bbmkdf = bbeldf + nanme + beam
-#   - install_BB_markers
-#
 #   - define_BB_lenses
-#           - define_BB_markers
-#               bbmkdf = bbeldf + nanme + beam
 #           - install_BB_markers
 #           - survey_BB_markers
-#               survey_BB_markersIP
 #           - calculate_BB_lenses
+#           - init_BB_lenses
 #           - install_BB_lenses
+#           - enable_BB_lenses
+#           - update_BB_lenses
+#       installs the defined BB elements in both beams
+#       returns DFs with twiss, tsumm, bblens and survey data
+#
 
 Version = '2.00 - (ie) 18.05.2020'
 
@@ -34,8 +33,9 @@ import subprocess
 import re
 import itertools
 
-import pmadx
-import qslice
+import py4madx
+from py4madx import pmadx
+from py4madx import qslice
 
 # ------- Elements ---------------------
 
