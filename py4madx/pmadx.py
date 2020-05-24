@@ -152,3 +152,35 @@ def setLHCXsingScheme(mmad, knobs, option=''):
     txt = '\n'.join(cmnd)
     mmad.input(txt)
     return
+
+def string_or_number(s):
+    try:
+        z = int(s)
+        return z
+    except ValueError:
+        try:
+            z = float(s)
+            return z
+        except ValueError:
+            return s.strip('"')
+
+def tfs2df(ftfs):
+    with open(ftfs) as fin:
+        i = 0
+        sumdata = {}
+        while i >= 0 :
+            header = fin.readline()
+            if header.find('*') == 0 :
+                cnames = header.strip().lower().split()[1:]
+                ignore_line = fin.readline()
+                i = -1
+            else:
+                cdata = header.strip().lower().split()
+                sumdata[cdata[1]] = string_or_number(cdata[3])
+        data = pd.read_csv(fin, delim_whitespace=True, header=0, index_col=False, names=cnames,quoting=2)
+		data['beam'] = sumdata['sequence']
+        data.set_index('name',inplace=True, drop=False )
+
+		sumdf = pd.DataFrame.from_dict(sumdata, orient='index').T
+        sumdf['beam'] = sumdata['sequence']
+    return data, sumdf
