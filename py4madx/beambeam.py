@@ -205,8 +205,8 @@ def define_BB_lenses(mmad, bbeldf, option='LAST'):
 
     mmad.globals.on_bb_charge = 1
 
-    enable_BB_lenses(mmad, np.unique(madxbbelb1['qflag'].values))
-    enable_BB_lenses(mmad, np.unique(madxbbelb2['qflag'].values))
+    enable_BB_lenses(mmad, np.unique(bblensb1['qflag'].values))
+    enable_BB_lenses(mmad, np.unique(bblensb2['qflag'].values))
 
     delta = 1.0e14
     j = 1
@@ -226,7 +226,7 @@ def define_BB_lenses(mmad, bbeldf, option='LAST'):
         twissb2_j, tsummb2_j = pmadx.tfs2df(f'temp/twissb2_bb{j}.tfs')
         twiss_j = pd.concat([twissb1_j, twissb2_j])
         tsumm_j = pd.concat([tsummb1_j, tsummb2_j])
-        #twiss_j, tsumm_j = pmadx.twissLHC(mmad, selection=re.compile('|'.join(['^ip[12358]','^bbmrk_','^bb_'])), fout='')
+        #twiss_j, tsumm_j = pmadx.twissLHC(mmad, selection=re.compile('|'.join(['^ip[12358]','^bbmk_','^bb_'])), fout='')
         twiss_j['iter'] = j
         tsumm_j['iter'] = j
         twiss_j.to_pickle(f'twissbb_{j}.pkl')
@@ -258,8 +258,8 @@ def define_BB_lenses(mmad, bbeldf, option='LAST'):
         j += 1
 
     print(f'\t - convergence reached after {j} iterrations')
-    pmadx.removeElementsFromSeq(mmad, 'lhcb1', 'bbmarker', 'bbmrk_')
-    pmadx.removeElementsFromSeq(mmad, 'lhcb2', 'bbmarker', 'bbmrk_')
+    pmadx.removeElementsFromSeq(mmad, 'lhcb1', 'bbmarker', 'bbmk_')
+    pmadx.removeElementsFromSeq(mmad, 'lhcb2', 'bbmarker', 'bbmk_')
     
     if option == 'LAST':
         ltwiss.append(twiss_j)
@@ -312,6 +312,13 @@ def calculate_BB_lenses(mmad, bbeldf, lbeamw, lbeams, twissdf, tsummdf, survdf):
     bblensdf['yma'] = bblensdf.markers.apply(lambda x : twissdf.loc[x].y)
     bblensdf['lbeamw'] = lbeamw
     bblensdf['lbeams'] = lbeams
+
+    def qflag(ip, bbtype, id):
+        if bbtype == 'lr':
+            return 'ON_BB_Q'+(bbtype+ip+ipside[np.sign(id)]).upper()
+        else:
+            return 'ON_BB_Q'+(bbtype+ip).upper()
+    bblensdf['qflag'] = bblensdf.apply(lambda row : qfla(row['ip], row['type'], row['id']), axis=1)
     return bblensdf
 
 def init_BB_lenses(mmad, bblensdf):
@@ -323,17 +330,11 @@ def init_BB_lenses(mmad, bblensdf):
     
     for i, row in bblensdf.iterrows(): 
         qbb = row.charge
-        _name = row.namew
-        if row['type'] == 'lr' :
-            side = ipside[np.sign(row['id'])]
-        else:
-            side = ''
-        _qflag = 'ON_BB_Q'+(row['type']+row['ip']+side).upper()
-        qflags.append(f'{_qflag}')
-        bblpar.append(f'''sigx_{_name} = {row.sigx:<15.8g}; sigy_{_name} = {row.sigy:<15.8g}; xma_{_name} = {row.xma:<15.8g}; yma_{_name} = {row.yma:<15.8g};''')
+        qflags.append(f'{row.qflag}')
+        bblpar.append(f'''sigx_{row.namew} = {row.sigx:<15.8g}; sigy_{row.namew} = {row.sigy:<15.8g}; xma_{row.namew} = {row.xma:<15.8g}; yma_{row.namew} = {row.yma:<15.8g};''')
         # bbldef.append(f'''bb_{_name}: beambeam, charge:={qbb}*{_qflag}, sigx:=sigx_{_name}, sigy:=sigy_{_name}, xma:=xma_{_name}, yma:=yma_{_name}, bbshape=1, bbdir=-1;''')
-        bbldef.append(f'''bb_{_name}: beambeam, charge:={qbb}*{_qflag}, sigx:=sigx_{_name}, sigy:=sigy_{_name}, xma:=xma_{_name}, yma:=yma_{_name}, bbshape=1, bbdir=-1;''')
-        bblins.append(f'''install, element=bb_{_name},at={row.spos},from={row.ip};''')
+        bbldef.append(f'''bb_{row.namew}: beambeam, charge:={qbb}*{row.qflag}, sigx:=sigx_{row.namew}, sigy:=sigy_{row.namew}, xma:=xma_{row.namew}, yma:=yma_{row.namew}, bbshape=1, bbdir=-1;''')
+        bblins.append(f'''install, element=bb_{row.namew},at={row.spos},from={row.ip};''')
 
     bblenses = {}
     bblenses['elpar'] = bblpar
@@ -388,9 +389,7 @@ def install_BB_lenses(mmad, madxbbel, lbeam):
 def update_BB_lenses(mmad, bblensdf):
     bblpar = []
     for i, row in bblensdf.iterrows(): 
-        qbb = row.charge
-        _name = row.namew
-        bblpar.append(f'''sigx_{_name} = {row.sigx:<15.8g}; sigy_{_name} = {row.sigy:<15.8g}; xma_{_name} = {row.xma:<15.8g}; yma_{_name} = {row.yma:<15.8g};''')
+        bblpar.append(f'''sigx_{_row.namew} = {row.sigx:<15.8g}; sigy_{row.namew} = {row.sigy:<15.8g}; xma_{row.namew} = {row.xma:<15.8g}; yma_{row.namew} = {row.yma:<15.8g};''')
 
     _cmd_bblpar = '\n'.join(bblpar)
     mmad.input(f'''
