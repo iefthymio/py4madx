@@ -37,12 +37,16 @@ import py4madx
 from py4madx import pmadx
 from py4madx import qslice
 
+
+ipside = {-1:'l', 1:'r', 0:''}
+
 # ------- Elements ---------------------
 
 def define_BB_elements(bbho={'ip1':0,'ip2':0,'ip5':0,'ip8':0},
                        bblr={'ip1':[],'ip2':[],'ip5':[],'ip8':[]},
                        sigmaz=1.0,
                        lrsdist=26658.8832/35640*5):
+    ''' Define BB elements - name = [ho/lr]ipX[l/r/'']_n'''
     lbbeldf = []
     _tmp = pd.DataFrame()
     lbbeldf.append(_tmp)  
@@ -62,9 +66,8 @@ def define_BB_elements(bbho={'ip1':0,'ip2':0,'ip5':0,'ip8':0},
     return _tmp
 
 def define_BBho_ip(ip, nho, sigma):
-    side = {-1:'l', 1:'r', 0:''}
     _aux = qslice.qslice(qtot=1.0, sigma=sigma, nslices=nho)
-    _aux['elname'] = _aux['id'].apply(lambda j: ip.lower()+side[np.sign(j)]+'ho_'+str(np.abs(j)))
+    _aux['elname'] = 'ho'+_aux['id'].apply(lambda j: ip.lower()+ipside[np.sign(j)]+'_'+str(np.abs(j)))
     _aux['ip'] = ip.lower()
     _aux['type'] = 'ho'
     return _aux
@@ -72,8 +75,8 @@ def define_BBho_ip(ip, nho, sigma):
 def define_BBlr_ip(ip, bblr, sep):
     spos = [sep*x for x in bblr]
     chrg = np.ones(len(bblr))
-    eln = [*[ip.lower()+'l_'+str(np.abs(j)) for j in bblr if j < 0], 
-           *[ip.lower()+'r_'+str(np.abs(j)) for j in bblr if j > 0]]
+    eln = [*['lr'+ip.lower()+'l_'+str(np.abs(j)) for j in bblr if j < 0], 
+           *['lr'+ip.lower()+'r_'+str(np.abs(j)) for j in bblr if j > 0]]
     elip = [ip.lower()]*len(bblr)
     _aux = pd.DataFrame({'spos':spos,'charge':chrg,'id':bblr, 'elname':eln, 'ip':elip})
     _aux['type'] = 'lr'
@@ -82,13 +85,16 @@ def define_BBlr_ip(ip, bblr, sep):
 # ------- Markers -----------------------
 
 def install_BB_markers(mmad, bbeldf, lbeam, clean=False):
+    ''' define BB markers per beam - name : 'bbmk_[ho/lr]ipX[l//r/'']bY.n '''
     bm = lbeam.replace('lhc','')
    
     if clean :
-        pmadx.removeElementsFromSeq(mmad, lbeam, 'bbmarker', f'bbmrk_')
-    _mrkdf = bbeldf.copy()
-    _mrkdf['elname'] = _mrkdf.elname.apply(lambda x : 'bbmrk_'+x.replace('_',bm+'.'))
-    cmd = [f'install element={row.elname}, class=bbmarker, at={row.spos}, from={row.ip};' for i,row in _mrkdf.iterrows()]
+        pmadx.removeElementsFromSeq(mmad, lbeam, 'bbmarker', f'bbmk_')
+    bbmrkdf = bbeldf.copy()
+    bbmrkdf['elname'] = bbmrkdf.elname.apply(lambda x : 'bbmk_'+x.replace('_',bm+'.'))
+    bbmrkdf['beam'] = lbeam
+
+    cmd = [f'install element={row.elname}, class=bbmarker, at={row.spos}, from={row.ip};' for i,row in bbmrkdf.iterrows()]
     _instcmd = '\n'.join(cmd)
     mmad.input(f'''
     option, warn, info;
@@ -101,7 +107,7 @@ def install_BB_markers(mmad, bbeldf, lbeam, clean=False):
     ''')
     assert bbeldf.shape[0] == pmadx.countElementsInSeq(mmad, 'bbmrk', lbeam), \
         f' {lbeam}: Number of installed bb markers  does not match that of bbel '
-    return
+    return bbmrkdf
 
 # ------- Survey -----------------------
 
@@ -133,8 +139,8 @@ def calculate_x_su(bbeldf, survdf):
     survb1 = survdf[survdf['beam'] == 'lhcb1']
     survb2 = survdf[survdf['beam'] == 'lhcb2']
         
-    namho0b1 = 'bbmk_ho'+ipn+'b1_0'
-    namho0b2 = 'bbmk_ho'+ipn+'b2_0'
+    namho0b1 = 'bbmk_ho'+ipn+'b1.0'
+    namho0b2 = 'bbmk_ho'+ipn+'b2.0'
 
     x_su = (survb2.loc[namb2].x - survb1.loc[namb1].x) - (survb2.loc[namho0b2].x - survb1.loc[namho0b1].x)
     return x_su
@@ -149,10 +155,23 @@ def define_BB_lenses(mmad, bbeldf, option='LAST'):
     ltsumm = []
     lbblen = []
 
-    install_BB_markers(mmad, bbeldf, 'lhcb1', clean=True)
-    install_BB_markers(mmad, bbeldf, 'lhcb2', clean=True)
+    bbmrkb1 = install_BB_markers(mmad, bbeldf, 'lhcb1', clean=True)
+    bbmrkb2 = install_BB_markers(mmad, bbeldf, 'lhcb2', clean=True)
     
-    twiss0, tsumm0 = pmadx.twissLHC(mmad, selection=re.compile('|'.join(['^ip[12358]','^bbmrk_'])), fout='')
+    mmad.input(f'''
+    select,flag=twiss,clear;
+    select,flag=twiss,class=bbmarker,      column=name,x,y,px,py,betx,bety,sig11,sig12,sig22,sig33,sig34,sig44,sig13,sig14,sig23,sig24;
+    select,flag=twiss,pattern="IP[12358]$",column=name,x,y,px,py,betx,bety,sig11,sig12,sig22,sig33,sig34,sig44,sig13,sig14,sig23,sig24;
+    use,sequence=lhcb1;twiss,file="temp/twissb1_bb0.tfs";
+    !readmytable,file="temp/twissb1_bb0.tfs",table=twissb1;
+    use,sequence=lhcb2;twiss,file="temp/twissb2_bb0.tfs";
+    !readmytable,file="temp/twissb2_bb0.tfs",table=twissb2;
+    ''')
+    twissb1_0, tsummb1_0 = pmadx.tfs2df('temp/twissb1_bb0.tfs')
+    twissb2_0, tsummb2_0 = pmadx.tfs2df('temp/twissb2_bb0.tfs') 
+    # twiss0, tsumm0 = pmadx.twissLHC(mmad, selection=re.compile('|'.join(['^ip[12358]','^bbmk_'])), fout='')
+    twiss0 = pd.concat([twissb1_0, twissb2_0])
+    tsumm0 = pd.concat([tsummb1_0, tsummb2_0])
     twiss0['iter'] = -1
     tsumm0['iter'] = -1
     ltwiss.append(twiss0)
@@ -186,15 +205,28 @@ def define_BB_lenses(mmad, bbeldf, option='LAST'):
 
     mmad.globals.on_bb_charge = 1
 
-    enable_BB_lenses(mmad, madxbbelb1['qflag'])
-    enable_BB_lenses(mmad, madxbbelb2['qflag'])
+    enable_BB_lenses(mmad, np.unique(madxbbelb1['qflag'].values))
+    enable_BB_lenses(mmad, np.unique(madxbbelb2['qflag'].values))
 
     delta = 1.0e14
-    j = 0
+    j = 1
     while delta > 1.0e-14:
         print(f'\n>>>> loop [{j}]\n')
         
-        twiss_j, tsumm_j = pmadx.twissLHC(mmad, selection=re.compile('|'.join(['^ip[12358]','^bbmrk_','^bb_'])), fout='')
+        mmad.input(f'''
+        select,flag=twiss,clear;
+        select,flag=twiss,class=bbmarker,      column=name,x,y,px,py,betx,bety,sig11,sig12,sig22,sig33,sig34,sig44,sig13,sig14,sig23,sig24;
+        select,flag=twiss,pattern="IP[12358]$",column=name,x,y,px,py,betx,bety,sig11,sig12,sig22,sig33,sig34,sig44,sig13,sig14,sig23,sig24;
+        use,sequence=lhcb1;twiss,file="temp/twissb1_bb{j}.tfs";
+        !readmytable,file="temp/twissb1_bb{j}.tfs",table=twissb1;
+        use,sequence=lhcb2;twiss,file="temp/twissb2_bb{j}.tfs";
+        !readmytable,file="temp/twissb2_bb{j}.tfs",table=twissb2;
+        ''')
+        twissb1_j, tsummb1_j = pmadx.tfs2df(f'temp/twissb1_bb{j}.tfs')
+        twissb2_j, tsummb2_j = pmadx.tfs2df(f'temp/twissb2_bb{j}.tfs')
+        twiss_j = pd.concat([twissb1_j, twissb2_j])
+        tsumm_j = pd.concat([tsummb1_j, tsummb2_j])
+        #twiss_j, tsumm_j = pmadx.twissLHC(mmad, selection=re.compile('|'.join(['^ip[12358]','^bbmrk_','^bb_'])), fout='')
         twiss_j['iter'] = j
         tsumm_j['iter'] = j
         twiss_j.to_pickle(f'twissbb_{j}.pkl')
@@ -251,36 +283,36 @@ def calculate_BB_lenses(mmad, bbeldf, lbeamw, lbeams, twissdf, tsummdf, survdf):
     egxs = tsumms.ex
     egys = tsumms.ey
 
-    _bblensdf = bbeldf.copy()
-    _bblensdf['namew'] = _bblensdf.elname.apply(lambda x : x.replace('_',bnw+'.'))
-    _bblensdf['markerw'] = _bblensdf.elname.apply(lambda x : 'bbmrk_'+x.replace('_',bnw+'.'))
-    _bblensdf['markers'] = _bblensdf.elname.apply(lambda x : 'bbmrk_'+x.replace('_',bns+'.'))
-    _bblensdf['lens'] = _bblensdf.markerw.apply(lambda x : x.replace('bbmrk_','bb_'))
+    bblensdf = bbeldf.copy()
+    bblensdf['namew'] = bblensdf.elname.apply(lambda x : x.replace('_',bnw+'.'))
+    bblensdf['markerw'] = bblensdf.elname.apply(lambda x : 'bbmk_'+x.replace('_',bnw+'.'))
+    bblensdf['markers'] = bblensdf.elname.apply(lambda x : 'bbmk_'+x.replace('_',bns+'.'))
+    bblensdf['lens'] = bblensdf.markerw.apply(lambda x : x.replace('bbmk_','bb_'))
 
-    _bblensdf['sigx'] = _bblensdf.markers.apply(lambda x : np.sqrt(egxs*twisss.loc[x].betx))
-    _bblensdf['sigy'] = _bblensdf.markers.apply(lambda x : np.sqrt(egys*twisss.loc[x].bety))
+    bblensdf['sigx'] = bblensdf.markers.apply(lambda x : np.sqrt(egxs*twisss.loc[x].betx))
+    bblensdf['sigy'] = bblensdf.markers.apply(lambda x : np.sqrt(egys*twisss.loc[x].bety))
 
     def x_su(elname, ip, survdf):
         survb1 = survdf[survdf['beam'] == 'lhcb1']
         survb2 = survdf[survdf['beam'] == 'lhcb2']
             
-        namho0b1 = 'bbmrk_'+ip+'hob1.0'
-        namho0b2 = 'bbmrk_'+ip+'hob2.0'
-        namb1 = 'bbmrk_'+elname.replace('_','b1.')
-        namb2 = 'bbmrk_'+elname.replace('_','b2.')
+        namho0b1 = 'bbmk_ho'+ip+'b1.0'
+        namho0b2 = 'bbmk_ho'+ip+'b2.0'
+        namb1 = 'bbmk_'+elname.replace('_','b1.')
+        namb2 = 'bbmk_'+elname.replace('_','b2.')
 
         x_su = (survb2.loc[namb2].x - survb1.loc[namb1].x) - (survb2.loc[namho0b2].x - survb1.loc[namho0b1].x)
         return x_su
 
-    _bblensdf['x_su'] = _bblensdf.apply(lambda row: x_su(row['elname'], row['ip'], survdf), axis=1)
+    bblensdf['x_su'] = bblensdf.apply(lambda row: x_su(row['elname'], row['ip'], survdf), axis=1)
     if lbeamw == 'lhcb1' :
-        _bblensdf['xma'] = _bblensdf.apply(lambda row: twisss.loc[row['markers']].x + row['x_su'], axis=1)
+        bblensdf['xma'] = bblensdf.apply(lambda row: twisss.loc[row['markers']].x + row['x_su'], axis=1)
     else:
-        _bblensdf['xma'] = _bblensdf.apply(lambda row: twisss.loc[row['markers']].x - row['x_su'], axis=1)
-    _bblensdf['yma'] = _bblensdf.markers.apply(lambda x : twissdf.loc[x].y)
-    _bblensdf['lbeamw'] = lbeamw
-    _bblensdf['lbeams'] = lbeams
-    return _bblensdf
+        bblensdf['xma'] = bblensdf.apply(lambda row: twisss.loc[row['markers']].x - row['x_su'], axis=1)
+    bblensdf['yma'] = bblensdf.markers.apply(lambda x : twissdf.loc[x].y)
+    bblensdf['lbeamw'] = lbeamw
+    bblensdf['lbeams'] = lbeams
+    return bblensdf
 
 def init_BB_lenses(mmad, bblensdf):
     
@@ -288,11 +320,15 @@ def init_BB_lenses(mmad, bblensdf):
     bbldef = []
     bblins = []
     qflags = []
-       
+    
     for i, row in bblensdf.iterrows(): 
         qbb = row.charge
         _name = row.namew
-        _qflag = 'ON_BB_Q'+_name.upper()
+        if row['type'] == 'lr' :
+            side = ipside[np.sign(row['id'])]
+        else:
+            side = ''
+        _qflag = 'ON_BB_Q'+(row['type']+row['ip']+side).upper()
         qflags.append(f'{_qflag}')
         bblpar.append(f'''sigx_{_name} = {row.sigx:<15.8g}; sigy_{_name} = {row.sigy:<15.8g}; xma_{_name} = {row.xma:<15.8g}; yma_{_name} = {row.yma:<15.8g};''')
         # bbldef.append(f'''bb_{_name}: beambeam, charge:={qbb}*{_qflag}, sigx:=sigx_{_name}, sigy:=sigy_{_name}, xma:=xma_{_name}, yma:=yma_{_name}, bbshape=1, bbdir=-1;''')
