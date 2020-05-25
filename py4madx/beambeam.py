@@ -105,7 +105,7 @@ def install_BB_markers(mmad, bbeldf, lbeam, clean=False):
     endedit;
     option, -warn, -info;
     ''')
-    assert bbeldf.shape[0] == pmadx.countElementsInSeq(mmad, 'bbmrk', lbeam), \
+    assert bbeldf.shape[0] == pmadx.countElementsInSeq(mmad, 'bbmk', lbeam), \
         f' {lbeam}: Number of installed bb markers  does not match that of bbel '
     return bbmrkdf
 
