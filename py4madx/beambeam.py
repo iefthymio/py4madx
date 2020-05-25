@@ -313,12 +313,12 @@ def calculate_BB_lenses(mmad, bbeldf, lbeamw, lbeams, twissdf, tsummdf, survdf):
     bblensdf['lbeamw'] = lbeamw
     bblensdf['lbeams'] = lbeams
 
-    def qflag(ip, bbtype, id):
+    def onqflag(ip, bbtype, id):
         if bbtype == 'lr':
             return 'ON_BB_Q'+(bbtype+ip+ipside[np.sign(id)]).upper()
         else:
             return 'ON_BB_Q'+(bbtype+ip).upper()
-    bblensdf['qflag'] = bblensdf.apply(lambda row : qfla(row['ip], row['type'], row['id']), axis=1)
+    bblensdf['qflag'] = bblensdf.apply(lambda row : onqflag(row['ip'], row['type'], row['id']), axis=1)
     return bblensdf
 
 def init_BB_lenses(mmad, bblensdf):

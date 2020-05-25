@@ -177,7 +177,7 @@ def tfs2df(ftfs):
             else:
                 cdata = header.strip().lower().split()
                 sumdata[cdata[1]] = string_or_number(cdata[3])
-    data = pd.read_csv(fin, delim_whitespace=True, header=0, index_col=False, names=cnames,quoting=2)
+        data = pd.read_csv(fin, delim_whitespace=True, header=0, index_col=False, names=cnames,quoting=2)
     data['beam'] = sumdata['sequence']
     data.set_index('name',inplace=True, drop=False )
 
