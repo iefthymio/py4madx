@@ -179,6 +179,7 @@ def tfs2df(ftfs):
                 sumdata[cdata[1]] = string_or_number(cdata[3])
         data = pd.read_csv(fin, delim_whitespace=True, header=0, index_col=False, names=cnames,quoting=2)
     data['beam'] = sumdata['sequence']
+    data['name'] = data['name'].str_lower()
     data.set_index('name', inplace=True, drop=False )
 
     sumdf = pd.DataFrame.from_dict(sumdata, orient='index').T
