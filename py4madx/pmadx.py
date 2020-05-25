@@ -168,16 +168,14 @@ def tfs2df(ftfs):
     with open(ftfs) as fin:
         i = 0
         sumdata = {}
-        while i >= 0 :
+        header = fin.readline()
+        while header.find('*') < 0 :
+            cdata = header.strip().lower().split()
+            sumdata[cdata[1]] = string_or_number(cdata[3])
             header = fin.readline()
-            if header.find('*') == 0 :
-                cnames = header.strip().lower().split()[1:]
-                ignore_line = fin.readline()
-                i = -1
-            else:
-                cdata = header.strip().lower().split()
-                sumdata[cdata[1]] = string_or_number(cdata[3])
-        data = pd.read_csv(fin, delim_whitespace=True, header=0, index_col=False, names=cnames,quoting=2)
+            
+        cnames = header.strip().lower()
+        data = pd.read_csv(fin, delim_whitespace=True, header=0, index_col=False, names=cnames.split()[1:], quoting=2)
     data['beam'] = sumdata['sequence']
     data['name'] = data['name'].str.lower()
     data.set_index('name', inplace=True, drop=False )
