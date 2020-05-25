@@ -389,7 +389,7 @@ def install_BB_lenses(mmad, madxbbel, lbeam):
 def update_BB_lenses(mmad, bblensdf):
     bblpar = []
     for i, row in bblensdf.iterrows(): 
-        bblpar.append(f'''sigx_{_row.namew} = {row.sigx:<15.8g}; sigy_{row.namew} = {row.sigy:<15.8g}; xma_{row.namew} = {row.xma:<15.8g}; yma_{row.namew} = {row.yma:<15.8g};''')
+        bblpar.append(f'''sigx_{row.namew} = {row.sigx:<15.8g}; sigy_{row.namew} = {row.sigy:<15.8g}; xma_{row.namew} = {row.xma:<15.8g}; yma_{row.namew} = {row.yma:<15.8g};''')
 
     _cmd_bblpar = '\n'.join(bblpar)
     mmad.input(f'''
