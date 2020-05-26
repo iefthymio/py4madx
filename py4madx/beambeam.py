@@ -359,7 +359,7 @@ def disable_BB_lenses(mmad, qflags):
     _qval = [f'{q}=0;' for q in qflags]
     _mcmd = '\n'.join(_qval)
     mmad.input(f'''
-    option, warn, info;
+    option, warn, -info;
     {_mcmd}
     option, -warn, -info;
     ''')
@@ -370,7 +370,7 @@ def enable_BB_lenses(mmad, qflags):
     _qval = [f'{q}=1;' for q in qflags]
     _mcmd = '\n'.join(_qval)
     mmad.input(f'''
-    option, warn, info;
+    option, warn, -info;
     {_mcmd}
     option, -warn, -info;
     ''')
@@ -384,7 +384,7 @@ def install_BB_lenses(mmad, madxbbel, lbeam):
     qflags0 = [ f'{x} = 0;' for x in madxbbel['qflag']]
     _cmd_qfzero = '\n'.join(qflags0)
     mmad.input(f'''
-    option, echo, warn, info;
+    option, -echo, warn, -info;
     {_cmd_qfzero}
     {_cmd_bbldef}
     {_cmd_bblele}
@@ -404,7 +404,7 @@ def update_BB_lenses(mmad, bblensdf):
 
     _cmd_bblpar = '\n'.join(bblpar)
     mmad.input(f'''
-    option, echo, warn, info;
+    option, -echo, warn, -info;
     {_cmd_bblpar}
     option, -echo, -warn, -info;
     ''')
