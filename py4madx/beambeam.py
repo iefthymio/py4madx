@@ -446,8 +446,8 @@ EXPERT
     print(np.unique(twisss['beam'].values))
     for i, row in bblensdf.iterrows():
         if row['type'] == 'ho' :    # --- 6D lens
-            ox = (twisss.loc[row['markers']].x - twissw.loc[row['markerw']].x+1.0e-10)*1e3
-            oy = (twisss.loc[row['markers']].y - twissw.loc[row['markerw']].y+1.0e-10)*1e3
+            ox = (twisss.loc[row['markers']].x - twissw.loc[row['markerw']].x-row['x_su']+1.0e-10)*1e3
+            oy = (twisss.loc[row['markers']].y - twissw.loc[row['markerw']].y-row['x_su']+1.0e-10)*1e3
             if np.abs(ox)<1e-7 : ox = np.sign(ox)*1e-7
             if np.abs(oy)<1e-7 : oy = np.sign(oy)*1e-7
 
@@ -502,73 +502,6 @@ EXPERT
         fout.write(bblock_el)
         bblock.append(bblock_el)
     return bblock
-
-def sixtrack_Input_BBLenses(mmad, btwdf, lbeam, ibeco=1, ibtyp=0, lhc=2, ibbc=0):
-    ''' Generate the SixTrack Input for the bblens and lbeam
-        for the keywrds look at http://sixtrack.web.cern.ch/SixTrack/docs/user_full/manual.php#Ch6.S6
-
-        Save the data to the bb_lenses.dat file in the current directory. 
-    '''
-    fout = open('bb_lenses.dat','w')
-    bblock = []
-    beam = mmad.sequence[lbeam].beam
-    b_part = beam.npart
-    b_exn = beam.exn*1e6
-    b_eyn = beam.eyn*1e6
-    b_sigt = beam.sigt
-    b_sige = beam.sige
-    bblock_head = f'''BEAM\nEXPERT\n  {b_part:7.3e} {b_exn:15.9f} {b_eyn:15.9f} {b_sigt:15.9f} {b_sige:15.9f} {ibeco:1d} {ibtyp:1d} {lhc:1d} {ibbc:1d}\n'''
-    bblock.append(bblock_head)
-    fout.write(bblock_head)
-
-    # --- use the twiss of the two beams to calculate the BB lense parameters
-    sbeam = 'lhcb2' if lbeam == 'lhcb1' else 'lhcb1'
-    for i, row in btwdf[btwdf['beam'] == lbeam].iterrows():
-        name = row['name'].split(':')[0]
-        bbname = name.split('.')[1]
-        print ('>> bb element in twiss = {}, basename = {}'.format(name, bbname))
-        _tb2 = btwdf[(btwdf['beam'] == sbeam) & (btwdf['name'].str.find(bbname)> 0)]
-        ox = (_tb2.x[0] - row['x'])*1e3
-        oy = (_tb2.y[0] - row['y'])*1e3
-        if ( (ox > 0) and (ox < 1e-7)) : ox = 1e-7  # -- this to avoid numberical instabilities in SixTrack
-        if ( (oy > 0) and (oy < 1e-7)) : oy = 1e-7
-
-        pxb1 = row['px']; pxb2 = _tb2.px[0]
-        pyb1 = row['py']; pyb2 = _tb2.py[0]
-        dlt_px = pxb1 - pxb2
-        dlt_py = pyb1 - pyb2
-        xang = 0.5*np.sqrt(dlt_px**2+dlt_py**2)
-        if dlt_px == 0 :
-            xplane = np.pi/2
-        else:
-            xplane = np.arctan(dlt_py/dlt_px)
-        h_sep = -ox
-        v_sep = -oy
-        s_xx    = _tb2.sig11[0]*1e6
-        s_xxp   = _tb2.sig12[0]*1e6
-        s_xpxp  = _tb2.sig22[0]*1e6
-        s_yy    = _tb2.sig33[0]*1e6
-        s_yyp   = _tb2.sig34[0]*1e6
-        s_ypyp  = _tb2.sig44[0]*1e6
-        s_xy    = _tb2.sig13[0]*1e6
-        s_xyp   = _tb2.sig14[0]*1e6
-        s_xpy   = _tb2.sig23[0]*1e6
-        s_xpyp  = _tb2.sig24[0]*1e6
-        s_ratio = 1/15
-        ibsix   = 1
-
-        bblock_el = f'''{name:20s} {ibsix:2d} {xang:13.10g} {xplane:13.10g} {h_sep:15.9f} {v_sep:15.9f}\n'''
-        fout.write(bblock_el)
-        bblock.append(bblock_el)
-        bblock_el = f'''  {s_xx:13.10g} {s_xxp:13.10g} {s_xpxp:13.10g} {s_yy:13.10g} {s_yyp:13.10g}\n'''
-        fout.write(bblock_el)
-        bblock.append(bblock_el)
-        bblock_el = f'''  {s_ypyp:13.10g} {s_xy:13.10g} {s_xyp:13.10g} {s_xpy:13.10g} {s_xpyp:13.10g} {s_ratio:13.10g}\n'''
-        fout.write(bblock_el)
-        bblock.append(bblock_el)
-    fout.close()
-    print(bblock)
-    return
 
 def sixtrack_Save_BBLenses(bblock,fout):
     ''' Save the SixTrack Format BB lenses data to a file '''
