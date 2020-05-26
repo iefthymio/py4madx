@@ -23,7 +23,7 @@
 #       returns DFs with twiss, tsumm, bblens and survey data
 #
 
-Version = '2.00 - (ie) 18.05.2020'
+Version = '2.20 - (ie) 26.05.2020'
 
 import os
 import shutil
@@ -260,11 +260,13 @@ def define_BB_lenses(mmad, bbeldf, option='LAST'):
     print(f'\t - convergence reached after {j} iterrations')
 
     lbeam = 'lhcb'+str(int(mmad.globals.mylhcbeam))
-    twiss_fin = twissldf[(twissldf['name'].str.find('bb')==0)&(twissldf['iter']==ilast)]
-
     bbtxt = print_BB_Lenses(mmad, bblens_j[bblens_j['lbeamw'] == lbeam], 
                            twiss_j[twiss_j['name'].str.find('bb')==0], 
-                           lbeam='lhcb1', ibeco=1, ibtyp=0, lhc=2, ibbc=0, nhoslices=15)
+                           lbeam=lbeam, 
+                           ibeco=mmad.globals.k_ibeco, 
+                           ibtyp=mmad.globals.k_ibtyp, 
+                           lhc=mmad.globals.k_lhc, 
+                           ibbc=mmad.globals.k_ibbc)
     print(f'\t - bb lenses data saved to bb_lenses.dat file')
 
     pmadx.removeElementsFromSeq(mmad, 'lhcb1', 'bbmarker', 'bbmk_')
@@ -419,6 +421,11 @@ def print_BB_Lenses(mmad, bblensdf, twissdf, lbeam, ibeco=1, ibtyp=0, lhc=2, ibb
     b_eyn = beam.eyn*1e6
     b_sigt = beam.sigt
     b_sige = beam.sige
+
+    ibeco = int(ibeco)
+    ibtyp = int(ibtyp)
+    lhc   = int(lhc)
+    ibbc  = int(ibbc)   
     bblock_head = f'''BEAM
 EXPERT
     {b_part:7.3e} {b_exn:15.9f} {b_eyn:15.9f} {b_sigt:15.9f} {b_sige:15.9f} {ibeco:1d} {ibtyp:1d} {lhc:1d} {ibbc:1d}
@@ -470,7 +477,7 @@ EXPERT
             s_xyp   = twisss.loc[row['markers']].sig14*1e6
             s_xpy   = twisss.loc[row['markers']].sig23*1e6
             s_xpyp  = twisss.loc[row['markers']].sig24*1e6
-            s_ratio = 1/nhoslices
+            s_ratio = row['charge']
             ibsix   = 1
             bblock_el = f'''{name:18s} {ibsix:2d} {xang:13.10g} {xplane:13.10g} {h_sep:15.9f} {v_sep:15.9f}
    {s_xx:13.10g} {s_xxp:13.10g} {s_xpxp:13.10g} {s_yy:13.10g} {s_yyp:13.10g}
@@ -485,10 +492,10 @@ EXPERT
             if np.abs(oy)<1e-7 : oy = np.sign(oy)*1e-7
             h_sep   = -ox
             v_sep   = -oy
-            s_ratio = 1
+            s_ratio = row['charge']
             s_xy    = twisss.loc[row['markers']].sig13*1e6
             ibsix   = 0              
-            bblock_el = f'''{name:18s} {ibsix:2d} {s_xx:13.10g} {s_yy:13.10g} {h_sep:15.9f} {v_sep:15.9f} {s_ratio:13.10g} {s_xy:13.10g}
+            bblock_el = f'''{name:18s} {ibsix:2d} {s_xx:13.10g} {s_yy:13.10g} {h_sep:15.9f} {v_sep:15.9f} {s_ratio:13.10g}
 '''
         else:
             raise ValueError
