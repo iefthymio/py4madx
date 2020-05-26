@@ -258,6 +258,15 @@ def define_BB_lenses(mmad, bbeldf, option='LAST'):
         j += 1
 
     print(f'\t - convergence reached after {j} iterrations')
+
+    lbeam = 'lhcb'+str(int(mmad.globals.mylhcbeam))
+    twiss_fin = twissldf[(twissldf['name'].str.find('bb')==0)&(twissldf['iter']==ilast)]
+
+    bbtxt = print_BB_Lenses(mmad, bblens_j[bblens_j['lbeamw'] == lbeam], 
+                           twiss_j[twiss_j['name'].str.find('bb')==0], 
+                           lbeam='lhcb1', ibeco=1, ibtyp=0, lhc=2, ibbc=0, nhoslices=15)
+    print(f'\t - bb lenses data saved to bb_lenses.dat file')
+
     pmadx.removeElementsFromSeq(mmad, 'lhcb1', 'bbmarker', 'bbmk_')
     pmadx.removeElementsFromSeq(mmad, 'lhcb2', 'bbmarker', 'bbmk_')
     
@@ -401,6 +410,92 @@ def update_BB_lenses(mmad, bblensdf):
 
 # ------- Prepare SixTrack -----------------------
 
+def print_BB_Lenses(mmad, bblensdf, twissdf, lbeam, ibeco=1, ibtyp=0, lhc=2, ibbc=0, nhoslices=15):
+    fout = open('bb_lenses.dat','w')
+    bblock = []
+    beam = mmad.sequence[lbeam].beam
+    b_part = beam.npart
+    b_exn = beam.exn*1e6
+    b_eyn = beam.eyn*1e6
+    b_sigt = beam.sigt
+    b_sige = beam.sige
+    bblock_head = f'''BEAM
+EXPERT
+    {b_part:7.3e} {b_exn:15.9f} {b_eyn:15.9f} {b_sigt:15.9f} {b_sige:15.9f} {ibeco:1d} {ibtyp:1d} {lhc:1d} {ibbc:1d}
+'''
+    bblock.append(bblock_head)
+    fout.write(bblock_head)
+
+    # --- use the twiss of the two beams to calculate the BB lense parameters
+    sbeam = 'lhcb2'
+    wbeam = 'lhcb1'
+    if lbeam == 'lhcb2':
+        sbeam = 'lhcb1'
+        wbeam = 'lhcb2'
+        
+    twisss = twissdf[twissdf['beam'] == sbeam]
+    twissw = twissdf[twissdf['beam'] == wbeam]
+    print(twisss.shape, twissw.shape)
+    print(np.unique(twisss['beam'].values))
+    for i, row in bblensdf.iterrows():
+        if row['type'] == 'ho' :    # --- 6D lens
+            ox = (twisss.loc[row['markers']].x - twissw.loc[row['markerw']].x+1.0e-10)*1e3
+            oy = (twisss.loc[row['markers']].y - twissw.loc[row['markerw']].y+1.0e-10)*1e3
+            if np.abs(ox)<1e-7 : ox = np.sign(ox)*1e-7
+            if np.abs(oy)<1e-7 : oy = np.sign(oy)*1e-7
+
+            dlt_px = twissw.loc[row['markerw']].px - twisss.loc[row['markers']].px
+            dlt_py = twissw.loc[row['markerw']].py - twisss.loc[row['markers']].py
+            
+            xang = 0.5*np.sqrt(dlt_px**2+dlt_py**2)
+            if xang < 1e-20 : 
+                xang = 0.0
+            else:
+                if np.abs(dlt_px) >= np.abs(dlt_py) :
+                    xplane = np.arctan(dlt_py/dlt_px)
+                    xang = np.sign(dlt_px)*xang
+                else:
+                    xplane = np.abs(dlt_py)/dlt_py * (np.pi/2 - np.abs(np.arctan(dlt_px/dlt_py)))
+                    xang = np.sign(dlt_py)*xang
+            name    = row['lens']              
+            h_sep = -ox
+            v_sep = -oy
+            s_xx    = twisss.loc[row['markers']].sig11*1e6
+            s_xxp   = twisss.loc[row['markers']].sig12*1e6
+            s_xpxp  = twisss.loc[row['markers']].sig22*1e6
+            s_yy    = twisss.loc[row['markers']].sig33*1e6
+            s_yyp   = twisss.loc[row['markers']].sig34*1e6
+            s_ypyp  = twisss.loc[row['markers']].sig44*1e6
+            s_xy    = twisss.loc[row['markers']].sig13*1e6
+            s_xyp   = twisss.loc[row['markers']].sig14*1e6
+            s_xpy   = twisss.loc[row['markers']].sig23*1e6
+            s_xpyp  = twisss.loc[row['markers']].sig24*1e6
+            s_ratio = 1/nhoslices
+            ibsix   = 1
+            bblock_el = f'''{name:18s} {ibsix:2d} {xang:13.10g} {xplane:13.10g} {h_sep:15.9f} {v_sep:15.9f}
+   {s_xx:13.10g} {s_xxp:13.10g} {s_xpxp:13.10g} {s_yy:13.10g} {s_yyp:13.10g}
+   {s_ypyp:13.10g} {s_xy:13.10g} {s_xyp:13.10g} {s_xpy:13.10g} {s_xpyp:13.10g} {s_ratio:13.10g}
+'''
+        elif row['type'] == 'lr':   # --- 4D lens
+            s_xx    = twisss.loc[row['markers']].sig11*1e6
+            s_yy    = twisss.loc[row['markers']].sig33*1e6
+            ox = (twisss.loc[row['markers']].x - twissw.loc[row['markerw']].x + 1e-10)*1e3
+            oy = (twisss.loc[row['markers']].y - twissw.loc[row['markerw']].y + 1e-10)*1e3
+            if np.abs(ox)<1e-7 : ox = np.sign(ox)*1e-7
+            if np.abs(oy)<1e-7 : oy = np.sign(oy)*1e-7
+            h_sep   = -ox
+            v_sep   = -oy
+            s_ratio = 1
+            s_xy    = twisss.loc[row['markers']].sig13*1e6
+            ibsix   = 0              
+            bblock_el = f'''{name:18s} {ibsix:2d} {s_xx:13.10g} {s_yy:13.10g} {h_sep:15.9f} {v_sep:15.9f} {s_ratio:13.10g} {s_xy:13.10g}
+'''
+        else:
+            raise ValueError
+        fout.write(bblock_el)
+        bblock.append(bblock_el)
+    return bblock
+
 def sixtrack_Input_BBLenses(mmad, btwdf, lbeam, ibeco=1, ibtyp=0, lhc=2, ibbc=0):
     ''' Generate the SixTrack Input for the bblens and lbeam
         for the keywrds look at http://sixtrack.web.cern.ch/SixTrack/docs/user_full/manual.php#Ch6.S6
@@ -476,9 +571,8 @@ def sixtrack_Save_BBLenses(bblock,fout):
     f.close()
     return
 
-def sixtrack_Update_BbeamSElementDef():
+def sixtrack_Update_BBdef():
     ''' Update the single element definition to use the BEAM EXPERT block data'''
-    # os.rename(r'fc.2',r'fc.2.original')
     shutil.copy2('fc.2','fc.2.original')
     import subprocess
     subprocess.call(["sed","-r","-i",'s/ 20 .+/ 20 0.0 0.0 0.0 0.0 0.0 0.0/g',"fc.2"])
