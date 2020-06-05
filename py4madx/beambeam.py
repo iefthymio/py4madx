@@ -381,7 +381,8 @@ def install_BB_lenses(mmad, madxbbel, lbeam):
     _cmd_bbldef = '\n'.join(madxbbel['elpar'])
     _cmd_bblele = '\n'.join(madxbbel['eldef'])
     _cmd_bblins = '\n'.join(madxbbel['elins'])
-    qflags0 = [ f'{x} = 0;' for x in madxbbel['qflag']]
+  
+    qflags0 = [ f'{x} = 0;' for x in np.unique(madxbbel['qflag'])]
     _cmd_qfzero = '\n'.join(qflags0)
     mmad.input(f'''
     option, -echo, warn, -info;
