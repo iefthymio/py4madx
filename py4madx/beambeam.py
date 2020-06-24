@@ -485,6 +485,7 @@ EXPERT
    {s_ypyp:13.10g} {s_xy:13.10g} {s_xyp:13.10g} {s_xpy:13.10g} {s_xpyp:13.10g} {s_ratio:13.10g}
 '''
         elif row['type'] == 'lr':   # --- 4D lens
+            name    = row['lens']
             s_xx    = twisss.loc[row['markers']].sig11*1e6
             s_yy    = twisss.loc[row['markers']].sig33*1e6
             ox = (twisss.loc[row['markers']].x - twissw.loc[row['markerw']].x + 1e-10)*1e3
