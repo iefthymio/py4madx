@@ -237,8 +237,8 @@ def define_BB_lenses(mmad, bbeldf, alternate=False, option='LAST'):
             twiss_df.to_pickle(f'twissbb_{j}.pkl')
             tsumm_df.to_pickle(f'tsummbb_{j}.pkl')
 
-            bblensb1 = calculate_BB_lenses(mmad, bbeldf, 'lhcb1', 'lhcb2', twiss0, tsumm0, survdf)
-            bblensb2 = calculate_BB_lenses(mmad, bbeldf, 'lhcb2', 'lhcb1', twiss0, tsumm0, survdf)
+            bblensb1 = calculate_BB_lenses(mmad, bbeldf, 'lhcb1', 'lhcb2', twiss_df, tsumm_df, survdf)
+            bblensb2 = calculate_BB_lenses(mmad, bbeldf, 'lhcb2', 'lhcb1', twiss_df, tsumm_df, survdf)
             bblens = pd.concat([bblensb1, bblensb2])
             bblens['iter'] = j
             bblens.to_pickle(f'bblens_{j}.pkl')
