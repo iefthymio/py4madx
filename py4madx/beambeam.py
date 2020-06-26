@@ -200,8 +200,8 @@ def define_BB_lenses(mmad, bbeldf, alternate=False, option='LAST'):
         ltsumm = []
         lbblen = []
 
-        ltwiss.append(twiss0)
-        ltsumm.append(tsumm0)
+        ltwiss.append(twiss_df)
+        ltsumm.append(tsumm_df)
         lbblen.append(bblens)
 
         ips0, xip0, yip0 = pmadx.getLHCBeamPosAtIP(twiss0)
