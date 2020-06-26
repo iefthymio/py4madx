@@ -147,14 +147,12 @@ def calculate_x_su(bbeldf, survdf):
 
 # ------- Lenses -----------------------
 
-def define_BB_lenses(mmad, bbeldf, option='LAST'):
- 
-    ipsbb = np.unique(bbeldf.ip.values)
-    
-    ltwiss = []
-    ltsumm = []
-    lbblen = []
+def define_BB_lenses(mmad, bbeldf, alternate=False, option='LAST'):
+    ''' Define BB lenses according to input bbeldf. If alternate=True a loop on the two beams is included 
+    until a stabilisation of the orbit in the IPs is stable '''
 
+    ipsbb = np.unique(bbeldf.ip.values)
+  
     bbmrkb1 = install_BB_markers(mmad, bbeldf, 'lhcb1', clean=True)
     bbmrkb2 = install_BB_markers(mmad, bbeldf, 'lhcb2', clean=True)
     
@@ -167,26 +165,23 @@ def define_BB_lenses(mmad, bbeldf, option='LAST'):
     use,sequence=lhcb2;twiss,file="temp/twissb2_bb0.tfs";
     !readmytable,file="temp/twissb2_bb0.tfs",table=twissb2;
     ''')
-    twissb1_0, tsummb1_0 = pmadx.tfs2df('temp/twissb1_bb0.tfs')
-    twissb2_0, tsummb2_0 = pmadx.tfs2df('temp/twissb2_bb0.tfs') 
+    twissb1, tsummb1 = pmadx.tfs2df('temp/twissb1_bb0.tfs')
+    twissb2, tsummb2 = pmadx.tfs2df('temp/twissb2_bb0.tfs') 
     # twiss0, tsumm0 = pmadx.twissLHC(mmad, selection=re.compile('|'.join(['^ip[12358]','^bbmk_'])), fout='')
-    twiss0 = pd.concat([twissb1_0, twissb2_0])
-    tsumm0 = pd.concat([tsummb1_0, tsummb2_0])
-    twiss0['iter'] = -1
-    tsumm0['iter'] = -1
-    ltwiss.append(twiss0)
-    ltsumm.append(tsumm0)
-    twiss0.to_pickle('twissbb0.pkl')
-    tsumm0.to_pickle('tsummbb0.pkl')
+    twiss_df = pd.concat([twissb1, twissb2])
+    tsumm_df = pd.concat([tsummb1, tsummb2])
+    twiss_df['iter'] = 0
+    tsumm_df['iter'] = 0
+    twiss_df.to_pickle('twissbb0.pkl')
+    tsumm_df.to_pickle('tsummbb0.pkl')
 
     survdf = survey_BB_markers(mmad, ipsbb)
     survdf.to_pickle('survdbb0.pkl')
 
-    bblensb1 = calculate_BB_lenses(mmad, bbeldf, 'lhcb1', 'lhcb2', twiss0, tsumm0, survdf)
-    bblensb2 = calculate_BB_lenses(mmad, bbeldf, 'lhcb2', 'lhcb1', twiss0, tsumm0, survdf)
+    bblensb1 = calculate_BB_lenses(mmad, bbeldf, 'lhcb1', 'lhcb2', twiss_df, tsumm_df, survdf)
+    bblensb2 = calculate_BB_lenses(mmad, bbeldf, 'lhcb2', 'lhcb1', twiss_df, tsumm_df, survdf)
     bblens = pd.concat([bblensb1, bblensb2])
-    bblens['iter'] = -1
-    lbblen.append(bblens)
+    bblens['iter'] = 0
     bblens.to_pickle('bblens0.pkl')
 
     madxbbelb1 = init_BB_lenses(mmad, bblensb1)
@@ -199,69 +194,87 @@ def define_BB_lenses(mmad, bbeldf, option='LAST'):
     assert bbeldf.shape[0] == pmadx.countElementsInSeq(mmad, 'bb_', 'lhcb2'), \
         f' lhcb1: Number of installed bb markers  does not match that of bbel' 
 
-    ips0, xip0, yip0 = pmadx.getLHCBeamPosAtIP(twiss0)
-    np.set_printoptions(formatter={'float': '{: 12.5g}'.format})
-    [print(f'{ip} : x = {x} --> sep0_x = {np.diff(x)} y={y} -->sep0_y = {np.diff(y)}') for ip,x,y in zip(ips0,xip0,yip0)]
+    if alternate :
+           
+        ltwiss = []
+        ltsumm = []
+        lbblen = []
 
-    mmad.globals.on_bb_charge = 1
+        ltwiss.append(twiss0)
+        ltsumm.append(tsumm0)
+        lbblen.append(bblens)
 
-    enable_BB_lenses(mmad, np.unique(bblensb1['qflag'].values))
-    enable_BB_lenses(mmad, np.unique(bblensb2['qflag'].values))
+        ips0, xip0, yip0 = pmadx.getLHCBeamPosAtIP(twiss0)
+        np.set_printoptions(formatter={'float': '{: 12.5g}'.format})
+        [print(f'{ip} : x = {x} --> sep0_x = {np.diff(x)} y={y} -->sep0_y = {np.diff(y)}') for ip,x,y in zip(ips0,xip0,yip0)]
 
-    delta = 1.0e14
-    j = 1
-    while delta > 1.0e-14:
-        print(f'\n>>>> loop [{j}]\n')
-        
-        mmad.input(f'''
-        select,flag=twiss,clear;
-        select,flag=twiss,class=bbmarker,      column=name,x,y,px,py,betx,bety,sig11,sig12,sig22,sig33,sig34,sig44,sig13,sig14,sig23,sig24;
-        select,flag=twiss,pattern="IP[12358]$",column=name,x,y,px,py,betx,bety,sig11,sig12,sig22,sig33,sig34,sig44,sig13,sig14,sig23,sig24;
-        use,sequence=lhcb1;twiss,file="temp/twissb1_bb{j}.tfs";
-        !readmytable,file="temp/twissb1_bb{j}.tfs",table=twissb1;
-        use,sequence=lhcb2;twiss,file="temp/twissb2_bb{j}.tfs";
-        !readmytable,file="temp/twissb2_bb{j}.tfs",table=twissb2;
-        ''')
-        twissb1_j, tsummb1_j = pmadx.tfs2df(f'temp/twissb1_bb{j}.tfs')
-        twissb2_j, tsummb2_j = pmadx.tfs2df(f'temp/twissb2_bb{j}.tfs')
-        twiss_j = pd.concat([twissb1_j, twissb2_j])
-        tsumm_j = pd.concat([tsummb1_j, tsummb2_j])
-        #twiss_j, tsumm_j = pmadx.twissLHC(mmad, selection=re.compile('|'.join(['^ip[12358]','^bbmk_','^bb_'])), fout='')
-        twiss_j['iter'] = j
-        tsumm_j['iter'] = j
-        twiss_j.to_pickle(f'twissbb_{j}.pkl')
-        tsumm_j.to_pickle(f'tsummbb_{j}.pkl')
+        mmad.globals.on_bb_charge = 1
 
-        bblensb1_j = calculate_BB_lenses(mmad, bbeldf, 'lhcb1', 'lhcb2', twiss0, tsumm0, survdf)
-        bblensb2_j = calculate_BB_lenses(mmad, bbeldf, 'lhcb2', 'lhcb1', twiss0, tsumm0, survdf)
-        bblens_j = pd.concat([bblensb1_j, bblensb2_j])
-        bblens_j['iter'] = j
-        bblens_j.to_pickle(f'bblens_{j}.pkl')
+        enable_BB_lenses(mmad, np.unique(bblensb1['qflag'].values))
+        enable_BB_lenses(mmad, np.unique(bblensb2['qflag'].values))
 
-        update_BB_lenses(mmad, bblensb1_j)
-        update_BB_lenses(mmad, bblensb2_j)
+        delta = 1.0e14
+        j = 1
+        while delta > 1.0e-14:
+            print(f'\n>>>> loop [{j}]\n')
+            
+            mmad.input(f'''
+            select,flag=twiss,clear;
+            select,flag=twiss,class=bbmarker,      column=name,x,y,px,py,betx,bety,sig11,sig12,sig22,sig33,sig34,sig44,sig13,sig14,sig23,sig24;
+            select,flag=twiss,pattern="IP[12358]$",column=name,x,y,px,py,betx,bety,sig11,sig12,sig22,sig33,sig34,sig44,sig13,sig14,sig23,sig24;
+            use,sequence=lhcb1;twiss,file="temp/twissb1_bb{j}.tfs";
+            !readmytable,file="temp/twissb1_bb{j}.tfs",table=twissb1;
+            use,sequence=lhcb2;twiss,file="temp/twissb2_bb{j}.tfs";
+            !readmytable,file="temp/twissb2_bb{j}.tfs",table=twissb2;
+            ''')
+            twissb1, tsummb1 = pmadx.tfs2df(f'temp/twissb1_bb{j}.tfs')
+            twissb2, tsummb2 = pmadx.tfs2df(f'temp/twissb2_bb{j}.tfs')
+            twiss_df = pd.concat([twissb1, twissb2])
+            tsumm_df = pd.concat([tsummb1, tsummb2])
+            #twiss_j, tsumm_j = pmadx.twissLHC(mmad, selection=re.compile('|'.join(['^ip[12358]','^bbmk_','^bb_'])), fout='')
+            twiss_df['iter'] = j
+            tsumm_df['iter'] = j
+            twiss_df.to_pickle(f'twissbb_{j}.pkl')
+            tsumm_df.to_pickle(f'tsummbb_{j}.pkl')
 
-        ips, xip, yip = pmadx.getLHCBeamPosAtIP(twiss_j)
-        [print(f'{i} : x = {x} --> sep0_x = {np.diff(x)} y={y} -->sep0_y = {np.diff(y)}') for i,x,y in zip(ips,xip,yip)]
-        
-        if option == 'ALL' :
-            lbblen.append(bblens_j)
-            ltwiss.append(twiss_j)
-            ltsumm.append(tsumm_j)
+            bblensb1 = calculate_BB_lenses(mmad, bbeldf, 'lhcb1', 'lhcb2', twiss0, tsumm0, survdf)
+            bblensb2 = calculate_BB_lenses(mmad, bbeldf, 'lhcb2', 'lhcb1', twiss0, tsumm0, survdf)
+            bblens = pd.concat([bblensb1, bblensb2])
+            bblens['iter'] = j
+            bblens.to_pickle(f'bblens_{j}.pkl')
 
-        delta_x = np.asarray(xip).ravel() - np.asarray(xip0).ravel()
-        delta_y = np.asarray(yip).ravel() - np.asarray(yip0).ravel()
-        delta = np.dot(delta_x, delta_x) + np.dot(delta_y, delta_y)
-        
-        xip0 = xip
-        yip0 = yip
-        j += 1
+            update_BB_lenses(mmad, bblensb1)
+            update_BB_lenses(mmad, bblensb2)
 
-    print(f'\t - convergence reached after {j} iterrations')
+            ips, xip, yip = pmadx.getLHCBeamPosAtIP(twiss_df)
+            [print(f'{i} : x = {x} --> sep0_x = {np.diff(x)} y={y} -->sep0_y = {np.diff(y)}') for i,x,y in zip(ips,xip,yip)]
+            
+            if option == 'ALL' :
+                lbblen.append(bblens)
+                ltwiss.append(twiss_df)
+                ltsumm.append(tsumm_df)
+
+            delta_x = np.asarray(xip).ravel() - np.asarray(xip0).ravel()
+            delta_y = np.asarray(yip).ravel() - np.asarray(yip0).ravel()
+            delta = np.dot(delta_x, delta_x) + np.dot(delta_y, delta_y)
+            
+            xip0 = xip
+            yip0 = yip
+            j += 1
+
+        print(f'\t - convergence reached after {j} iterrations')
+        if option == 'LAST':
+            lbblen.append(bblens)
+            ltwiss.append(twiss_df)
+            ltsumm.append(tsumm_df)
+ 
+        twiss_df = pd.concat(ltwiss)
+        tsumm_df = pd.concat(ltsumm)
+        bblens = pd.concat(lbblen)
 
     lbeam = 'lhcb'+str(int(mmad.globals.mylhcbeam))
-    bbtxt = print_BB_Lenses(mmad, bblens_j[bblens_j['lbeamw'] == lbeam], 
-                           twiss_j[twiss_j['name'].str.find('bb')==0], 
+    bbtxt = print_BB_Lenses(mmad, bblens[bblens['lbeamw'] == lbeam], 
+                           twiss_df[twiss_df['name'].str.find('bb')==0], 
                            lbeam=lbeam, 
                            ibeco=mmad.globals.k_ibeco, 
                            ibtyp=mmad.globals.k_ibtyp, 
@@ -272,12 +285,7 @@ def define_BB_lenses(mmad, bbeldf, option='LAST'):
     pmadx.removeElementsFromSeq(mmad, 'lhcb1', 'bbmarker', 'bbmk_')
     pmadx.removeElementsFromSeq(mmad, 'lhcb2', 'bbmarker', 'bbmk_')
     
-    if option == 'LAST':
-        ltwiss.append(twiss_j)
-        ltsumn.append(tsumm_j)
-        lbblen.append(bblens_j)
-
-    return pd.concat(ltwiss), pd.concat(ltsumm), pd.concat(lbblen), survdf
+    return twiss_df, tsumm_df, bblens, survdf
 
 def calculate_BB_lenses(mmad, bbeldf, lbeamw, lbeams, twissdf, tsummdf, survdf):
 
