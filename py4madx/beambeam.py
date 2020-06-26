@@ -204,7 +204,7 @@ def define_BB_lenses(mmad, bbeldf, alternate=False, option='LAST'):
         ltsumm.append(tsumm_df)
         lbblen.append(bblens)
 
-        ips0, xip0, yip0 = pmadx.getLHCBeamPosAtIP(twiss0)
+        ips0, xip0, yip0 = pmadx.getLHCBeamPosAtIP(twiss_df)
         np.set_printoptions(formatter={'float': '{: 12.5g}'.format})
         [print(f'{ip} : x = {x} --> sep0_x = {np.diff(x)} y={y} -->sep0_y = {np.diff(y)}') for ip,x,y in zip(ips0,xip0,yip0)]
 
