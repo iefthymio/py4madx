@@ -62,11 +62,20 @@ def define_BB_elements(bbho={'ip1':0,'ip2':0,'ip5':0,'ip8':0},
         _lrdf = define_BBlr_ip(ip, bblr[ip], lrsdist)
         lbbeldf.append(_lrdf)
     _tmp = pd.concat(lbbeldf, sort=False)
+
+    # --- special treatment for IP1
+     
+    def ipseq(row):
+        if row['ip'] == 'ip1' and row['id']<0 :
+            return row['ip']+'.l1'
+        else:
+            return row['ip']
+    _tmp['ipseq'] = _tmp.apply(ipseq, axis=1)
     _tmp.set_index('elname', drop=False, inplace=True)
     return _tmp
 
 def define_BBho_ip(ip, nho, sigma):
-    _aux = qslice.qslice(qtot=1.0, sigma=sigma, nslices=nho)
+    _aux = qslice.qslice(qtot=1.0, sigma=sigma/2, nslices=nho)
     _aux['elname'] = 'ho'+_aux['id'].apply(lambda j: ip.lower()+ipside[np.sign(j)]+'_'+str(np.abs(j)))
     _aux['ip'] = ip.lower()
     _aux['type'] = 'ho'
@@ -94,7 +103,7 @@ def install_BB_markers(mmad, bbeldf, lbeam, clean=False):
     bbmrkdf['elname'] = bbmrkdf.elname.apply(lambda x : 'bbmk_'+x.replace('_',bm+'.'))
     bbmrkdf['beam'] = lbeam
 
-    cmd = [f'install element={row.elname}, class=bbmarker, at={row.spos}, from={row.ip};' for i,row in bbmrkdf.iterrows()]
+    cmd = [f'install element={row.elname}, class=bbmarker, at={row.spos}, from={row.ipseq};' for i,row in bbmrkdf.iterrows()]
     _instcmd = '\n'.join(cmd)
     mmad.input(f'''
     option, warn, info;
@@ -353,7 +362,7 @@ def init_BB_lenses(mmad, bblensdf):
         bblpar.append(f'''sigx_{row.namew} = {row.sigx:<15.8g}; sigy_{row.namew} = {row.sigy:<15.8g}; xma_{row.namew} = {row.xma:<15.8g}; yma_{row.namew} = {row.yma:<15.8g};''')
         # bbldef.append(f'''bb_{_name}: beambeam, charge:={qbb}*{_qflag}, sigx:=sigx_{_name}, sigy:=sigy_{_name}, xma:=xma_{_name}, yma:=yma_{_name}, bbshape=1, bbdir=-1;''')
         bbldef.append(f'''bb_{row.namew}: beambeam, charge:={qbb}*{row.qflag}, sigx:=sigx_{row.namew}, sigy:=sigy_{row.namew}, xma:=xma_{row.namew}, yma:=yma_{row.namew}, bbshape=1, bbdir=-1;''')
-        bblins.append(f'''install, element=bb_{row.namew},at={row.spos},from={row.ip};''')
+        bblins.append(f'''install, element=bb_{row.namew},at={row.spos},from={row.ipseq};''')
 
     bblenses = {}
     bblenses['elpar'] = bblpar
