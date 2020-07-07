@@ -110,7 +110,7 @@ def install_BB_markers(mmad, bbeldf, lbeam, clean=False):
     bbmarker : marker;
     seqedit, sequence={lbeam};
         {_instcmd}
-        flatten;
+        !flatten;
     endedit;
     option, -warn, -info;
     ''')
@@ -407,9 +407,9 @@ def install_BB_lenses(mmad, madxbbel, lbeam):
     {_cmd_bbldef}
     {_cmd_bblele}
     seqedit, sequence={lbeam};
-    flatten;
+    !flatten;
     {_cmd_bblins}
-    flatten;
+    !flatten;
     endedit;
     option, -echo, -warn, -info;
     ''')
