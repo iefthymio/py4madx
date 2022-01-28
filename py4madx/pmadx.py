@@ -6,7 +6,7 @@
 # MADX scripts to run with cpymad
 #
 
-Version = '2.00 - (ie) 18.05.2020'
+__version__ = '2.11 - (ie) 20.01.2022'
 
 import os
 import numpy as np
@@ -118,29 +118,14 @@ def twissLHC(mmad, selection=r'.', fout=''):
 
 def twissLHCBeam(mmad, lbeam, selection=r'.', fout=''):
     mmad.use(sequence=lbeam)
-    _ttable = mmad.twiss(file=fout)
-    _twissdf = twiss2df(_ttable)
-    _twissdf = _twissdf.filter(regex=selection, axis=0)
-    assert _twissdf.shape[0] > 0 , '>> twissLHCBeam: twiss table selection %r results to empty table!' % selection
+    _twissdf = mmad.twiss().dframe()
+    # _twissdf = _twissdf.filter(regex=selection, axis=0)
+    # assert _twissdf.shape[0] > 0 , '>> twissLHCBeam: twiss table selection %r results to empty table!' % selection
     _twissdf['beam'] = lbeam
-
-    _sumdf = pd.DataFrame.from_dict(mmad.table.summ, orient='index')
-    _beamdf = pd.DataFrame.from_dict(mmad.sequence[lbeam].beam, orient='index')
-    _gdf = pd.concat([_sumdf, _beamdf]).transpose().set_index('sequence') 
-    return _twissdf, _gdf
-
-def printLHCXsingScheme(mmad):
-    print('\n LHC beam crossing scheme :')
-    for v in LHCXsingKnobs:
-        print ('\t {:.<15s} {}'.format(v, mmad.globals[v]))
-    return
-
-def printLHCGlobalConfig(mmad):
-    print('>>> LHC Beam Configuration:')
-    for v in LHCGlobals:
-        print ('{:8s} = {:7.2f} '.format(v, mmad.globals[v]))
-    print (' ')
-    return
+    
+    _sumdf = mmad.table['summ'].dframe()
+    _sumdf = _sumdf.set_index(pd.Index([lbeam]))
+    return _twissdf, _sumdf
 
 def setLHCXsingScheme(mmad, knobs, option=''):
     cmnd = ''
@@ -184,3 +169,26 @@ def tfs2df(ftfs):
     sumdf['beam'] = sumdata['sequence']
     sumdf.set_index('beam', inplace=True, drop=True)
     return data, sumdf
+
+def compare_summ_df(df1, df2):
+    ''' check if the two summd dataframes are identical '''
+    identical = True
+    for i in df1.index:
+        x1 = df1.loc[i].values
+        x2 = df2.loc[i].values
+        if np.sum(x1 - x2) :
+            identical = False
+    return identical
+
+def compare_twiss_df(df1, df2):
+    ''' check if the two twiss dataframes are identical '''
+    identical = True
+    for beam in ['lhcb1', 'lhcb2']:
+        aux1 = df1[df1['beam'] == beam].select_dtypes(include='float64')
+        aux2 = df2[df2['beam'] == beam].select_dtypes(include='float64')
+        for i in aux1.index:
+            x1 = aux1.loc[i].values
+            x2 = aux2.loc[i].values
+            if np.sum(x1-x2) > 0 :
+                identical = False
+    return identical
