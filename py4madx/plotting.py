@@ -102,7 +102,7 @@ def _plot_optip(dftwiss, bim, ip, title=''):
     return fig
 
 
-def plot_optip(dftwiss, bim, ip, title=''):
+def plot_optip(dftwiss, bim, ip, title='', ymax=[]):
     ''' Plot optics around an LHC IP '''
 
     beamid = bim[-2:].lower()
@@ -163,25 +163,48 @@ def plot_optip(dftwiss, bim, ip, title=''):
     ax0.set_ylabel('$\\beta$-functions [m]')
     ax0.set_xlabel('s [m]')
     ax0.axvline(df_ip.loc[ip].s, ls='--', color='black')
-
+            
     ax3 = ax0.twinx()   # instantiate a second axes that shares the same x-axis
     
-    pdx,pdy = ax3.plot(df_ip['s'], df_ip['dx'], '-', df_ip['s'],df_ip['dy'], '--', color='brown')
-    ax3.tick_params(axis='y', labelcolor='brown')
-    ax3.set_ylabel('$D_{x,y}$ [m]', color='brown')  # we already handled the x-label with ax1
+    pdx,pdy = ax3.plot(df_ip['s'], df_ip['dx'], '-', df_ip['s'],df_ip['dy'], '--', color='orange')
+    ax3.tick_params(axis='y', labelcolor='orange')
+    ax3.set_ylabel('$D_{x,y}$ [m]', color='orange')  # we already handled the x-label with ax1
     ax3.legend([pdx, pdy], ['$D_x$','$D_y$'], loc='upper left')
     ax3.set_ylim(-1,3)
 
     ax0.grid()
+    if ymax :
+        ax0.set_ylim(ymax[0])
+        ax3.set_ylim(ymax[1])
+
     #fig.savefig('/cas/images/LHCB1OpticsRing.pdf')
     return fig
 
-
-def plot_optics(twissdf, title='VDM optics', fout='vdm_2016'):
+def plot_optics(twissdf, title='LHC Optics', fout='', fext='.pdf'):
     # fig = plot_optics(twissdf_ip, 'lhcb1', ip='ip1', title='VDM Optics 2016 - beam 1')
     for a, b in itertools.product(['lhcb1','lhcb2'], ['ip1', 'ip2','ip5','ip8']):
         fig = plot_optip(twissdf, bim=a, ip=b, title=f'{title} - {b.upper()} {a[-2:].upper()}')
-        fpdf = f'{fout}_{b.upper()}_{a[-2:].upper()}.pdf'
-        fig.savefig(fpdf, dpi=200, bbox_inches='tight')
-        print(f'>>>> figure saved to : {fpdf}')
+        if fout : 
+            fpdf = f'{fout}_{b.upper()}_{a[-2:].upper()}{fext}'
+            fig.savefig(fpdf, dpi=200, bbox_inches='tight')
+            print(f'>>>> figure saved to : {fpdf}')
  
+
+def plot_phaseadvance(df, bim, ips='', title='LHC Optics - Phase Advance', fout=''):
+    dfsel = (df['name'].str.contains(r'^ip[1258]:1', regex=True)) & (df['beam']==bim)
+    mudf = df[dfsel].sort_index()
+
+    for ip in [1, 2, 5 ,8]:
+        mudf[f'mux_ip{ip}'] = mudf['mux']-mudf['mux'].loc[f'ip{ip}']
+
+    fig,ax = plt.subplots(figsize=(15,8))
+    
+    if isinstance(ips, int):
+        ips = [ips]
+
+    for ip in ips:
+        mudf.plot(x=f'mux_ip{ip}', use_index=True, marker='o', ms=10, ax=ax)
+    ax.grid()
+    ax.set_title(f'{title} - B{bim[-1]}')
+    ax.legend()
+    return fig

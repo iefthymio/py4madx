@@ -26,12 +26,19 @@ def printLHCGlobalConfig(mmad):
     return
 '''
 
-def print_tune_values(summdf): 
-    print (f'---- print tune values :')
+def print_tune_values(summdf, fout=''):
+    print_lines = [] 
+    print_lines.append(f'---- print tune values :')
     for ib in ['lhcb1','lhcb2']:
         _aux = summdf.loc[ib]
-        print (f'\t  {ib} :  q1 = {_aux.q1:9.5f}, q2 = {_aux.q2:9.5f}, dq1 = {_aux.dq1:9.5f}, dq2 = {_aux.dq2:9.5f}')
-      
+        print_lines.append(f'\t  {ib} :  q1 = {_aux.q1:9.5f}, q2 = {_aux.q2:9.5f}, dq1 = {_aux.dq1:9.5f}, dq2 = {_aux.dq2:9.5f}')
+    [print(s) for s in print_lines]
+    if fout:
+        OF = open(fout, 'w')
+        [OF.write(s+'\n') for s in print_lines]
+        OF.close()
+    return
+
 def print_phase_advance(twissdf, fout='ipphaseadvance.txt'):
     OF =  open(fout, 'w')
     
