@@ -192,3 +192,26 @@ def compare_twiss_df(df1, df2):
             if np.sum(x1-x2) > 0 :
                 identical = False
     return identical
+
+def select_ip(df, nir, bim):
+    ''' Select twiss df around IR for bim'''
+    return df[df['beam']==bim].loc[f's.ds.l{nir}.b{bim[-1]}':f'e.ds.r{nir}.b{bim[-1]}']
+
+def twiss_select_srange(df, bim, srange):
+    return df[df['beam']==bim].loc[srange[0]:srange[1]]
+
+def select(df, nir, bim):
+    return df[df['beam']==bim].loc[f's.ds.l{nir}.b{bim[-1]}':f'e.ds.r{nir}.b{bim[-1]}']
+
+def get_twiss_at_element(df, regex, varlist=['name','keyword','s','betx','bety']):
+    ''' get twiss df line for selected element(s) based on regular expression
+                regex_q7 = r'mqm.a7[l,r]5'
+                _aux = get_betas_at_element(twiss_match, regex_q5)
+    '''
+    return df[df.index.str.contains(regex)][varlist]
+
+def deltaphase(tdf, beam, el1, el2, var, verbose=False):
+    dphase = tdf[tdf['beam']==beam].loc[el2][var] - tdf[tdf['beam']==beam].loc[el1][var]
+    if verbose:
+        print(f' phase: {el1} -> {el2}, {var} : {dphase:0<12.10g}')
+    return dphase
