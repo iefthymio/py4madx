@@ -623,7 +623,7 @@ def global_variables(mymad):
 def ip15_betas(mymad):
     savelines = []
     savelines.append('\n! *** BETAS in IP1, IP2, IP5 and IP8**')
-    for i in [1,2,5,8]:
+    for i in [1,5]:
         for p in ['x','y']:
             v = f"bet{p}_IP{str(i)}"
             savelines.append(madx_var_def(mymad, v)) 
