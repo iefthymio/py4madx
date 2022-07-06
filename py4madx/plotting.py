@@ -10,6 +10,7 @@ import pandas as pd
 import itertools
 
 from . import pmadx
+# import pmadx
 
 import matplotlib 
 import matplotlib.pyplot as plt
@@ -102,7 +103,7 @@ def _plot_optip(dftwiss, bim, ip, title=''):
     return fig
 
 
-def plot_optip(dftwiss, bim, ip, title='', ymax=[]):
+def plot_optip(dftwiss, bim, ip, title='', ymax=[], yticks=''):
     ''' Plot optics around an LHC IP '''
 
     beamid = bim[-2:].lower()
@@ -176,6 +177,12 @@ def plot_optip(dftwiss, bim, ip, title='', ymax=[]):
     if ymax :
         ax0.set_ylim(ymax[0])
         ax3.set_ylim(ymax[1])
+
+    if yticks:
+        start, end = ax0.get_ylim()
+        ax0.yaxis.set_ticks(np.arange(start, end, yticks))
+
+
 
     #fig.savefig('/cas/images/LHCB1OpticsRing.pdf')
     return fig
