@@ -215,3 +215,48 @@ def deltaphase(tdf, beam, el1, el2, var, verbose=False):
     if verbose:
         print(f' phase: {el1} -> {el2}, {var} : {dphase:0<12.10g}')
     return dphase
+
+def get_dphase_ir(twdf, nir):
+    if twdf.index[0].find('ip') >= 0:
+        ip_start = int(twdf.index[0][-1:])
+    if nir == ip_start:
+        _elb1 = twdf[twdf['beam']=='lhcb1'].index[-1]
+        _elb2 = twdf[twdf['beam']=='lhcb2'].index[-1]
+        return {'lhcb1': {
+            'mux' : deltaphase(twdf, 'lhcb1', f's.ds.l{nir}.b1', _elb1, 'mux') + deltaphase(twdf, 'lhcb1', f'ip{nir}', f'e.ds.r{nir}.b1', 'mux'),
+            'muy' : deltaphase(twdf, 'lhcb1', f's.ds.l{nir}.b1', _elb1, 'muy') + deltaphase(twdf, 'lhcb1', f'ip{nir}', f'e.ds.r{nir}.b1', 'muy')
+            },
+            'lhcb2': {
+            'mux' : deltaphase(twdf, 'lhcb2', f's.ds.l{nir}.b2', _elb2, 'mux') + deltaphase(twdf, 'lhcb2', f'ip{nir}', f'e.ds.r{nir}.b2', 'mux'),
+            'muy' : deltaphase(twdf, 'lhcb2', f's.ds.l{nir}.b2', _elb2, 'muy') + deltaphase(twdf, 'lhcb2', f'ip{nir}', f'e.ds.r{nir}.b2', 'muy')
+            }
+        }
+    else:
+        return {'lhcb1': { 
+            'mux' :  deltaphase(twdf, 'lhcb1', f's.ds.l{nir}.b1', f'e.ds.r{nir}.b1', 'mux'),
+            'muy' :  deltaphase(twdf, 'lhcb1', f's.ds.l{nir}.b1', f'e.ds.r{nir}.b1', 'muy')
+            },
+            'lhcb2': {
+            'mux' :  deltaphase(twdf, 'lhcb2', f's.ds.l{nir}.b2', f'e.ds.r{nir}.b2', 'mux'),
+            'muy' :  deltaphase(twdf, 'lhcb2', f's.ds.l{nir}.b2', f'e.ds.r{nir}.b2', 'muy')}
+        }
+
+def get_dphase_ssring(twdf):
+    _dflist = []
+    for ss in np.arange(1, 9):
+        dd = {'ip' : ss}
+        dd.update(get_dphase_ir(twdf, ss))
+        _dflist.append(pd.DataFrame(dd))
+    return pd.concat(_dflist)
+
+def twiss_rel_ip(tdf, nir, beam, 
+                 vars=['beam','name','s','keyword','betx','bety','mux','muy']):
+    _tmpir = select(tdf, nir, beam).copy()
+    if vars :
+        _tmpir = _tmpir[vars]
+    non_numeric_columns = [ c for c in _tmpir.columns if pd.api.types.is_object_dtype(_tmpir[c])]
+    _tmpnum = _tmpir.drop(columns=non_numeric_columns)
+    _tmpnum = _tmpnum.subtract(_tmpnum.loc[f'ip{nir}'], axis=1)
+    _tmpnonnum = _tmpir[non_numeric_columns]
+    
+    return _tmpnonnum.join(_tmpnum, how='outer')
