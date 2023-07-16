@@ -1,0 +1,13 @@
+Metadata-Version: 2.1
+Name: py4madx
+Version: 1.1.1
+Summary: Scripts to use with cpymad for LHC
+Home-page: git@github.com:iefthymio/py4madx.git
+Author: Ilias Efthymiopoulos
+Author-email: ilias.efthymiopoulos@cern.ch
+License: unlicense
+Platform: UNKNOWN
+License-File: LICENSE
+
+UNKNOWN
+
