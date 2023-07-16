@@ -216,37 +216,37 @@ def deltaphase(tdf, beam, el1, el2, var, verbose=False):
         print(f' phase: {el1} -> {el2}, {var} : {dphase:0<12.10g}')
     return dphase
 
-def get_dphase_ir(twdf, nir):
+def get_dphase_ir(twdf, nir, opt=0):
     if twdf.index[0].find('ip') >= 0:
         ip_start = int(twdf.index[0][-1:])
     if nir == ip_start:
         _elb1 = twdf[twdf['beam']=='lhcb1'].index[-1]
         _elb2 = twdf[twdf['beam']=='lhcb2'].index[-1]
-        return {'lhcb1': {
-            'mux' : deltaphase(twdf, 'lhcb1', f's.ds.l{nir}.b1', _elb1, 'mux') + deltaphase(twdf, 'lhcb1', f'ip{nir}', f'e.ds.r{nir}.b1', 'mux'),
-            'muy' : deltaphase(twdf, 'lhcb1', f's.ds.l{nir}.b1', _elb1, 'muy') + deltaphase(twdf, 'lhcb1', f'ip{nir}', f'e.ds.r{nir}.b1', 'muy')
-            },
-            'lhcb2': {
-            'mux' : deltaphase(twdf, 'lhcb2', f's.ds.l{nir}.b2', _elb2, 'mux') + deltaphase(twdf, 'lhcb2', f'ip{nir}', f'e.ds.r{nir}.b2', 'mux'),
-            'muy' : deltaphase(twdf, 'lhcb2', f's.ds.l{nir}.b2', _elb2, 'muy') + deltaphase(twdf, 'lhcb2', f'ip{nir}', f'e.ds.r{nir}.b2', 'muy')
-            }
-        }
+        _muxb1 = deltaphase(twdf, 'lhcb1', f's.ds.l{nir}.b1', _elb1, 'mux') + deltaphase(twdf, 'lhcb1', f'ip{nir}', f'e.ds.r{nir}.b1', 'mux')
+        _muxb2 = deltaphase(twdf, 'lhcb2', f's.ds.l{nir}.b2', _elb2, 'mux') + deltaphase(twdf, 'lhcb2', f'ip{nir}', f'e.ds.r{nir}.b2', 'mux')
+        _muyb1 = deltaphase(twdf, 'lhcb1', f's.ds.l{nir}.b1', _elb1, 'muy') + deltaphase(twdf, 'lhcb1', f'ip{nir}', f'e.ds.r{nir}.b1', 'muy')
+        _muyb2 = deltaphase(twdf, 'lhcb2', f's.ds.l{nir}.b2', _elb2, 'muy') + deltaphase(twdf, 'lhcb2', f'ip{nir}', f'e.ds.r{nir}.b2', 'muy')
     else:
-        return {'lhcb1': { 
-            'mux' :  deltaphase(twdf, 'lhcb1', f's.ds.l{nir}.b1', f'e.ds.r{nir}.b1', 'mux'),
-            'muy' :  deltaphase(twdf, 'lhcb1', f's.ds.l{nir}.b1', f'e.ds.r{nir}.b1', 'muy')
-            },
-            'lhcb2': {
-            'mux' :  deltaphase(twdf, 'lhcb2', f's.ds.l{nir}.b2', f'e.ds.r{nir}.b2', 'mux'),
-            'muy' :  deltaphase(twdf, 'lhcb2', f's.ds.l{nir}.b2', f'e.ds.r{nir}.b2', 'muy')}
-        }
+        _muxb1 = deltaphase(twdf, 'lhcb1', f's.ds.l{nir}.b1', f'e.ds.r{nir}.b1', 'mux')
+        _muyb1 = deltaphase(twdf, 'lhcb1', f's.ds.l{nir}.b1', f'e.ds.r{nir}.b1', 'muy')
+        _muxb2 = deltaphase(twdf, 'lhcb2', f's.ds.l{nir}.b2', f'e.ds.r{nir}.b2', 'mux')
+        _muyb2 = deltaphase(twdf, 'lhcb2', f's.ds.l{nir}.b2', f'e.ds.r{nir}.b2', 'muy')
+    
+    if opt == 0 : 
+        return {'lhcb1': {'mux' : _muxb1, 'muy' : _muyb1 },
+                'lhcb2': {'mux' : _muxb2, 'muy' : _muyb2 }}
+    else: 
+        return {'mux' : [_muxb1, _muxb2], 'muy' : [_muyb1, _muyb2], 'bim' : ['b1', 'b2'], 'ip' : [nir]*2}
 
-def get_dphase_ssring(twdf):
+def get_dphase_ssring(twdf, opt=0):
     _dflist = []
     for ss in np.arange(1, 9):
-        dd = {'ip' : ss}
-        dd.update(get_dphase_ir(twdf, ss))
-        _dflist.append(pd.DataFrame(dd))
+        if opt == 0 : 
+            dd = {'ip' : ss}
+            dd.update(get_dphase_ir(twdf, ss, opt))
+            _dflist.append(pd.DataFrame(dd))
+        else:
+            _dflist.append(pd.DataFrame(get_dphase_ir(twdf, ss, opt)))
     return pd.concat(_dflist)
 
 def twiss_rel_ip(tdf, nir, beam, 

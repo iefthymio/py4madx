@@ -102,8 +102,7 @@ def _plot_optip(dftwiss, bim, ip, title=''):
     #fig.savefig('/cas/images/LHCB1OpticsRing.pdf')
     return fig
 
-
-def plot_optip(dftwiss, bim, ip, title='', ymax=[], yticks=''):
+def plot_optip(dftwiss, bim, ip, title='', ymax=[], yticks='', ymaxdisp=[-1,3]):
     ''' Plot optics around an LHC IP '''
 
     beamid = bim[-2:].lower()
@@ -171,7 +170,7 @@ def plot_optip(dftwiss, bim, ip, title='', ymax=[], yticks=''):
     ax3.tick_params(axis='y', labelcolor='orange')
     ax3.set_ylabel('$D_{x,y}$ [m]', color='orange')  # we already handled the x-label with ax1
     ax3.legend([pdx, pdy], ['$D_x$','$D_y$'], loc='upper left')
-    ax3.set_ylim(-1,3)
+    ax3.set_ylim(ymaxdisp)
 
     ax0.grid()
     if ymax :
@@ -181,8 +180,6 @@ def plot_optip(dftwiss, bim, ip, title='', ymax=[], yticks=''):
     if yticks:
         start, end = ax0.get_ylim()
         ax0.yaxis.set_ticks(np.arange(start, end, yticks))
-
-
 
     #fig.savefig('/cas/images/LHCB1OpticsRing.pdf')
     return fig
@@ -300,3 +297,4 @@ def plot_phaseadvance(df, bim, ips='', title='LHC Optics - Phase Advance', fout=
     ax.set_title(f'{title} - B{bim[-1]}')
     ax.legend()
     return fig
+
