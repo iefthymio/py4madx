@@ -1,5 +1,5 @@
 
-__version__ = "1.1 @ 28.01.2022"
+__version__ = "1.2 @ 16.07.2023"
 __author__ = "Ilias Efthymiopoulos (c)"
 
 from .pmadx import *

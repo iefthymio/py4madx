@@ -279,6 +279,92 @@ def plot_optbeam(dftwiss, bim, title='', ymax=[], yticks='', ymaxdisp=[-1,3]):
     #fig.savefig('/cas/images/LHCB1OpticsRing.pdf')
     return fig
 
+def plot_optbeam(dftwiss, bim, title='', ymax=[], yticks='', ymaxdisp=[-1,3]):
+    ''' Plot beam optics for the whole LHC ring'''
+
+    beamid = bim[-2:].lower()
+    df_beam = dftwiss[dftwiss['beam']==bim]
+
+    # betx = df_ip.loc[ip].betx
+    # bety = df_ip.loc[ip].bety
+    # print(f'IP {ip} Beam {bim} beta values = {betx} {bety}')
+
+    fig, axes = plt.subplots(nrows=2, ncols=1, sharex='col', 
+                             gridspec_kw={'height_ratios': [1,4]},
+                             figsize=(25,10))
+    fig.set_tight_layout({'pad':0.1, 'h_pad':0.1})
+
+    # -- head plot with lattice info
+    ax1 = axes[0]
+    ax1.plot(df_beam['s'],0*df_beam['s'],'k')
+    fstring = ''
+    for i in [1, 2, 5, 8]:
+        betx = df_beam.loc[f'ip{i}'].betx
+        bety = df_beam.loc[f'ip{i}'].bety
+        fstring = fstring + f' IP{i}:$\\beta_x$={betx:.2f}, $\\beta_y$={bety:.2f}'
+        
+    ax1.text(0.6, 1.02, fstring, fontsize=12, transform=ax1.transAxes)
+
+    DF=df_beam[(df_beam['keyword']=='quadrupole')]
+    for i in range(len(DF)):
+        aux=DF.iloc[i]
+        plotLatticeSeries(ax1, aux, height=aux.k1l, v_offset=aux.k1l/2, color='r')
+
+    color = 'red'
+    ax1.set_ylabel('1/f=K1L [m$^{-1}$]', color=color)  # we already handled the x-label with ax1
+    ax1.tick_params(axis='y', labelcolor=color)
+    ax1.grid()
+    ax1.set_ylim(-.05,.05)
+    # plt.title('CERN Large Hadron Collider, Beam 1, Injection Optics 2016, Q1='+format(madx.table.summ.Q1[0],'2.3f')+', Q2='+ format(madx.table.summ.Q2[0],'2.3f'))
+    ax1.set_title(title, loc='left')
+    # ax1.axvline(df_beam.loc[ip].s, ls='--', color='black')
+
+    ax2 = ax1.twinx()  # instantiate a second axes that shares the same x-axis
+    color = 'blue'
+    ax2.set_ylabel('$\\theta$=K0L [mrad]', color=color)  # we already handled the x-label with ax1
+    ax2.tick_params(axis='y', labelcolor=color)
+
+    DF=df_beam[(df_beam['keyword']=='rbend')]
+    for i in range(len(DF)):
+        aux=DF.iloc[i]
+        plotLatticeSeries(ax2, aux, height=aux.angle*1000, v_offset=aux.angle/2*1000, color='b')
+
+    DF=df_beam[(df_beam['keyword']=='sbend')]
+    for i in range(len(DF)):
+        aux=DF.iloc[i]
+        plotLatticeSeries(ax2, aux, height=aux.angle*1000, v_offset=aux.angle/2*1000, color='b')
+    ax2.set_ylim(-15,15)
+    
+    # -- bottom plot with optics data
+    ax0 = axes[1]
+
+    ax0.plot(df_beam['s'],df_beam['betx'],'b', label='$\\beta_x$')
+    ax0.plot(df_beam['s'],df_beam['bety'],'r', label='$\\beta_y$')
+    ax0.legend(loc='best')
+    ax0.set_ylabel('$\\beta$-functions [m]')
+    ax0.set_xlabel('s [m]')
+    # ax0.axvline(df_beam.loc[ip].s, ls='--', color='black')
+            
+    ax3 = ax0.twinx()   # instantiate a second axes that shares the same x-axis
+    
+    pdx,pdy = ax3.plot(df_beam['s'], df_beam['dx'], '-', df_beam['s'],df_beam['dy'], '--', color='orange')
+    ax3.tick_params(axis='y', labelcolor='orange')
+    ax3.set_ylabel('$D_{x,y}$ [m]', color='orange')  # we already handled the x-label with ax1
+    ax3.legend([pdx, pdy], ['$D_x$','$D_y$'], loc='upper left')
+    ax3.set_ylim(ymaxdisp)
+
+    ax0.grid()
+    if ymax :
+        ax0.set_ylim(ymax[0])
+        ax3.set_ylim(ymax[1])
+
+    if yticks:
+        start, end = ax0.get_ylim()
+        ax0.yaxis.set_ticks(np.arange(start, end, yticks))
+
+    #fig.savefig('/cas/images/LHCB1OpticsRing.pdf')
+    return fig
+
 def plot_phaseadvance(df, bim, ips='', title='LHC Optics - Phase Advance', fout=''):
     dfsel = (df['name'].str.contains(r'^ip[1258]:1', regex=True)) & (df['beam']==bim)
     mudf = df[dfsel].sort_index()
